@@ -5,28 +5,28 @@ import { themeButton } from '../utils/theme.js';
 
 const NAV=[
   {g:'Principal',items:[
-    {k:'dashboard',ic:'\ud83d\udcca',label:'Dashboard',href:'dashboard.html'},
-    {k:'pos',ic:'\ud83d\uded2',label:'Punto de Venta',href:'pos.html'}
+    {k:'dashboard',ic:'📊',label:'Dashboard',href:'dashboard.html'},
+    {k:'pos',ic:'🛒',label:'Punto de Venta',href:'pos.html'}
   ]},
   {g:'Operaciones',items:[
-    {k:'sales',ic:'\ud83e\uddfe',label:'Ventas',href:'sales.html'},
-    {k:'purchases',ic:'\ud83d\udce6',label:'Compras',href:'purchases.html'},
-    {k:'cash',ic:'\ud83d\udcb5',label:'Caja',href:'cash.html'}
+    {k:'sales',ic:'🧾',label:'Ventas',href:'sales.html'},
+    {k:'purchases',ic:'📦',label:'Compras',href:'purchases.html'},
+    {k:'cash',ic:'💵',label:'Caja',href:'cash.html'}
   ]},
-  {g:'Cat\u00e1logo',items:[
-    {k:'products',ic:'\ud83c\udff7\ufe0f',label:'Productos',href:'products.html'},
-    {k:'categories',ic:'\ud83d\uddc2\ufe0f',label:'Categor\u00edas',href:'categories.html'},
-    {k:'stock',ic:'\ud83d\udcc8',label:'Stock',href:'stock.html'}
+  {g:'Catálogo',items:[
+    {k:'products',ic:'🏷️',label:'Productos',href:'products.html'},
+    {k:'categories',ic:'🗂️',label:'Categorías',href:'categories.html'},
+    {k:'stock',ic:'📈',label:'Stock',href:'stock.html'}
   ]},
   {g:'Contactos',items:[
-    {k:'clients',ic:'\ud83d\udc65',label:'Clientes',href:'clients.html'},
-    {k:'suppliers',ic:'\ud83c\udfed',label:'Proveedores',href:'suppliers.html'}
+    {k:'clients',ic:'👥',label:'Clientes',href:'clients.html'},
+    {k:'suppliers',ic:'🏭',label:'Proveedores',href:'suppliers.html'}
   ]},
-  {g:'Gesti\u00f3n',items:[
-    {k:'reports',ic:'\ud83d\udcc9',label:'Reportes',href:'reports.html'},
-    {k:'users',ic:'\ud83d\udd11',label:'Usuarios',href:'users.html'},
-    {k:'audit',ic:'\ud83d\udd0d',label:'Auditor\u00eda',href:'audit.html'},
-    {k:'settings',ic:'\u2699\ufe0f',label:'Configuraci\u00f3n',href:'settings.html'}
+  {g:'Gestión',items:[
+    {k:'reports',ic:'📉',label:'Reportes',href:'reports.html'},
+    {k:'users',ic:'🔑',label:'Usuarios',href:'users.html'},
+    {k:'audit',ic:'🔍',label:'Auditoría',href:'audit.html'},
+    {k:'settings',ic:'⚙️',label:'Configuración',href:'settings.html'}
   ]}
 ];
 
@@ -49,15 +49,15 @@ export function renderShell(active,title){
       <div class="foot">
         <div class="user-card"><div class="av">${initials}</div>
           <div style="flex:1"><div class="nm">${u?.name||'Usuario'}</div><div class="rl">${ROLES[role]?.label||role}</div></div>
-          <button class="btn btn-icon btn-ghost" id="btnLogout" title="Cerrar sesi\u00f3n">\u23fb</button>
+          <button class="btn btn-icon btn-ghost" id="btnLogout" title="Cerrar sesión">⏻</button>
         </div>
       </div>
     </aside>
     <div class="main">
       <header class="topbar">
-        <button class="btn btn-icon btn-ghost menu-btn" id="btnMenu">\u2630</button>
+        <button class="btn btn-icon btn-ghost menu-btn" id="btnMenu">☰</button>
         <div class="page-title">${title||''}</div>
-        <div class="search"><i>\ud83d\udd0d</i><input id="globalSearch" placeholder="Buscar productos, clientes, ventas..."></div>
+        <div class="search"><i>🔍</i><input id="globalSearch" placeholder="Buscar productos, clientes, ventas..."></div>
         <div id="themeSlot"></div>
         <div class="avatar" title="${u?.email||''}">${initials}</div>
       </header>
