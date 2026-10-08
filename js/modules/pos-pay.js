@@ -12,7 +12,10 @@ export function openPayment({total,client,canCC}){
     let received=+total.toFixed(2);
     const body=document.createElement('div');
 
-    const methods=PAYMENT_METHODS.filter(m=>m.v!=='cuenta_corriente'||canCC);
+    let methods=PAYMENT_METHODS.filter(m=>m.v!=='cuenta_corriente'||canCC);
+    DB.get('settings','business').then(biz=>{ const en=biz&&biz.paymentMethods;
+      if(Array.isArray(en)&&en.length){ methods=methods.filter(m=>m.v==='efectivo'||en.includes(m.v)); paint(); }
+    }).catch(()=>{});
     function paid(){ return +lines.reduce((s,l)=>s+(+l.amount||0),0).toFixed(2); }
     function remaining(){ return +(total-paid()).toFixed(2); }
     const hasCash=()=>lines.some(l=>l.method==='efectivo');

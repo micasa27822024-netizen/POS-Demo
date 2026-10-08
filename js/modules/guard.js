@@ -3,11 +3,14 @@ import { initFirebase } from '../services/firebase.js';
 import { Auth } from '../services/auth.service.js';
 import { ensureSeed } from '../seed/demo-data.js';
 import { canAccess } from '../services/permissions.js';
+import { DB } from '../services/db.service.js';
+import { setCurrency } from '../utils/format.js';
 
 export async function requireAuth(moduleKey){
   await initFirebase();
   await ensureSeed();        // carga datos demo la primera vez (solo en MODO DEMO)
   await Auth.init();
+  try{ const biz=await DB.get('settings','business'); if(biz&&biz.currency) setCurrency(biz.currency); }catch(e){ /* usa moneda por defecto */ }
   const u=Auth.profile;
   if(!u){ location.href='login.html'; return null; }
   if(moduleKey && !canAccess(u.role,moduleKey)){
