@@ -30,7 +30,7 @@ export function openPayment({total,client,canCC}){
           ${methods.map(m=>`<div class="pay-m" data-add="${m.v}">${m.ic} ${m.l}</div>`).join('')}
         </div>
         <div id="payLines"></div>
-        ${hasCash()?`<div class="pay-line"><span class="pl-label">\ud83d\udcb5 Efectivo recibido</span>
+        ${hasCash()?`<div class="pay-line"><span class="pl-label">💵 Efectivo recibido</span>
           <input class="input" id="received" type="number" step="0.01" value="${received}"></div>`:''}
         <div class="pay-summary">
           <div class="row"><span>Pagado</span><b>${money(paid())}</b></div>
@@ -41,7 +41,7 @@ export function openPayment({total,client,canCC}){
       pl.innerHTML=lines.map((l,i)=>{const m=PAYMENT_METHODS.find(x=>x.v===l.method);
         return `<div class="pay-line"><span class="pl-label">${m.ic} ${m.l}</span>
           <input class="input" type="number" step="0.01" value="${l.amount}" data-amt="${i}">
-          <button class="btn btn-sm btn-ghost" data-rm="${i}">\u2715</button></div>`;}).join('');
+          <button class="btn btn-sm btn-ghost" data-rm="${i}">✕</button></div>`;}).join('');
       body.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{
         const mv=b.dataset.add; const r2=remaining();
         lines.push({method:mv,amount:r2>0?r2:0}); if(mv==='efectivo')received+=Math.max(0,r2); paint(); });
@@ -70,13 +70,13 @@ export function openPayment({total,client,canCC}){
 export async function showTicket(sale,client){
   const biz=(await DB.list('settings',{where:[['id','==','business']]}))[0]
     || (await DB.get('settings','business')) || {name:'Mi Comercio POS'};
-  const PM={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',transferencia:'Transferencia',cuenta_corriente:'Cta. Cte.',otros:'Otros'};
+  const PM={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',cuenta_corriente:'Cta. Cte.',otros:'Otros'};
   const body=document.createElement('div');
   body.innerHTML=`<div id="ticket" style="font-family:'Courier New',monospace;font-size:12.5px;background:#fff;color:#000;padding:16px;border-radius:8px;max-width:300px;margin:0 auto;line-height:1.5">
     <div style="text-align:center"><b style="font-size:15px">${biz.name||'Comercio'}</b><br>
       ${biz.address?biz.address+'<br>':''}${biz.cuit?'CUIT: '+biz.cuit+'<br>':''}${biz.phone?'Tel: '+biz.phone:''}</div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
-    <div>Comprobante interno N\u00b0 ${sale.number}<br>${new Date(sale.at).toLocaleString('es-AR')}<br>
+    <div>Comprobante interno N° ${sale.number}<br>${new Date(sale.at).toLocaleString('es-AR')}<br>
       Cliente: ${sale.clientName||'Consumidor Final'}<br>Vendedor: ${sale.userName}</div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
     ${sale.items.map(it=>`<div style="display:flex;justify-content:space-between"><span>${it.qty} ${it.unit} x ${it.name}</span></div>
@@ -88,9 +88,9 @@ export async function showTicket(sale,client){
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
     ${(sale.payments||[]).map(p=>`<div style="display:flex;justify-content:space-between"><span>${PM[p.method]||p.method}</span><span>${money(p.amount)}</span></div>`).join('')}
     ${sale.change?`<div style="display:flex;justify-content:space-between"><span>Vuelto</span><span>${money(sale.change)}</span></div>`:''}
-    <div style="text-align:center;margin-top:10px">\u00a1Gracias por su compra!</div>
+    <div style="text-align:center;margin-top:10px">¡Gracias por su compra!</div>
   </div>`;
-  const print=document.createElement('button'); print.className='btn btn-primary'; print.textContent='\ud83d\udda8\ufe0f Imprimir';
+  const print=document.createElement('button'); print.className='btn btn-primary'; print.textContent='🖨️ Imprimir';
   const close=document.createElement('button'); close.className='btn btn-ghost'; close.textContent='Cerrar';
   const mm=openModal({title:'Venta #'+sale.number,body,footer:[close,print],width:380});
   close.onclick=mm.close;

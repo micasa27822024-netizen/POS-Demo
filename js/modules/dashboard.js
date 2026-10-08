@@ -4,12 +4,12 @@ import { DB } from '../services/db.service.js';
 import { money, num, fdatetime, dayStart, monthStart } from '../utils/format.js';
 import { currentTheme } from '../utils/theme.js';
 
-const PM_LABEL={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',transferencia:'Transferencia',cuenta_corriente:'Cta. Corriente',otros:'Otros'};
+const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',cuenta_corriente:'Cta. Corriente',otros:'Otros'};
 
 (async()=>{
   const user=await requireAuth('dashboard'); if(!user) return;
   const view=renderShell('dashboard','Dashboard');
-  view.innerHTML='<div class="loader">Cargando panel\u2026</div>';
+  view.innerHTML='<div class="loader">Cargando panel…</div>';
 
   const [sales,products,clients,suppliers,categories]=await Promise.all([
     DB.list('sales'),DB.list('products'),DB.list('clients'),DB.list('suppliers'),DB.list('categories')]);
@@ -30,7 +30,7 @@ const PM_LABEL={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',
   const noStock=products.filter(p=>p.active!==false && (p.stock||0)<=0);
   const debtors=clients.filter(c=>(c.balance||0)>0);
 
-  // Productos m\u00e1s vendidos
+  // Productos más vendidos
   const prodQty={}; valid.forEach(s=>(s.items||[]).forEach(it=>prodQty[it.productId]=(prodQty[it.productId]||0)+it.qty));
   const topProducts=Object.entries(prodQty).map(([id,q])=>({p:products.find(x=>x.id===id),q}))
     .filter(x=>x.p).sort((a,b)=>b.q-a.q).slice(0,5);
@@ -39,35 +39,35 @@ const PM_LABEL={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',
     <div class="label">${label}</div><div class="value">${value}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
 
   view.innerHTML=`
-   <div class="page-head"><div><h1>Hola, ${user.name.split(' ')[0]} \ud83d\udc4b</h1><p>Resumen general de tu negocio</p></div></div>
+   <div class="page-head"><div><h1>Hola, ${user.name.split(' ')[0]} 👋</h1><p>Resumen general de tu negocio</p></div></div>
    <div class="grid grid-4">
-     ${stat('\ud83d\udcb0','var(--sales)','Ventas de hoy',money(totToday),todaySales.length+' operaciones')}
-     ${stat('\ud83d\udcc5','var(--primary)','Ventas del mes',money(totMonth),monthSales.length+' operaciones')}
-     ${stat('\ud83d\udcc8','var(--profit)','Ganancia del mes',money(profitMonth),'estimada')}
-     ${stat('\ud83e\uddfe','var(--purchases)','Ticket promedio',money(monthSales.length?totMonth/monthSales.length:0),'del mes')}
+     ${stat('💰','var(--sales)','Ventas de hoy',money(totToday),todaySales.length+' operaciones')}
+     ${stat('📅','var(--primary)','Ventas del mes',money(totMonth),monthSales.length+' operaciones')}
+     ${stat('📈','var(--profit)','Ganancia del mes',money(profitMonth),'estimada')}
+     ${stat('🧾','var(--purchases)','Ticket promedio',money(monthSales.length?totMonth/monthSales.length:0),'del mes')}
    </div>
    <div class="grid grid-4 mt-16">
-     ${stat('\ud83d\udcb5','var(--cash)','Cobrado efectivo',money(cash))}
-     ${stat('\ud83d\udcb3','var(--sales)','Cobrado tarjeta',money(card))}
-     ${stat('\ud83e\udde7','var(--clients)','Cuenta corriente',money(cc))}
-     ${stat('\u26a0\ufe0f','var(--alert)','Alertas de stock',num(lowStock.length+noStock.length,0),noStock.length+' sin stock')}
+     ${stat('💵','var(--cash)','Cobrado efectivo',money(cash))}
+     ${stat('💳','var(--sales)','Cobrado tarjeta',money(card))}
+     ${stat('🧧','var(--clients)','Cuenta corriente',money(cc))}
+     ${stat('⚠️','var(--alert)','Alertas de stock',num(lowStock.length+noStock.length,0),noStock.length+' sin stock')}
    </div>
    <div class="grid grid-2 mt-24">
      <div class="card card-pad"><div class="flex justify-between items-center" style="margin-bottom:10px">
-       <b>Ventas de los \u00faltimos 14 d\u00edas</b></div><canvas id="chDaily" height="120"></canvas></div>
-     <div class="card card-pad"><b>M\u00e9todos de pago</b><div style="max-width:260px;margin:10px auto"><canvas id="chPay"></canvas></div></div>
+       <b>Ventas de los últimos 14 días</b></div><canvas id="chDaily" height="120"></canvas></div>
+     <div class="card card-pad"><b>Métodos de pago</b><div style="max-width:260px;margin:10px auto"><canvas id="chPay"></canvas></div></div>
    </div>
    <div class="grid grid-2 mt-16">
-     <div class="card card-pad"><b>Ventas por categor\u00eda</b><canvas id="chCat" height="120"></canvas></div>
-     <div class="card card-pad"><b>Productos m\u00e1s vendidos</b><canvas id="chTop" height="120"></canvas></div>
+     <div class="card card-pad"><b>Ventas por categoría</b><canvas id="chCat" height="120"></canvas></div>
+     <div class="card card-pad"><b>Productos más vendidos</b><canvas id="chTop" height="120"></canvas></div>
    </div>
    <div class="grid grid-2 mt-16">
-     <div class="card card-pad"><b>\u26a0\ufe0f Stock bajo / sin stock</b><div id="lowStockList" class="mt-8"></div></div>
-     <div class="card card-pad"><b>\ud83d\udd52 \u00daltimas ventas</b><div id="recentSales" class="mt-8"></div></div>
+     <div class="card card-pad"><b>⚠️ Stock bajo / sin stock</b><div id="lowStockList" class="mt-8"></div></div>
+     <div class="card card-pad"><b>🕒 Últimas ventas</b><div id="recentSales" class="mt-8"></div></div>
    </div>
    <div class="grid grid-2 mt-16">
-     <div class="card card-pad"><b>\ud83e\udde7 Clientes con deuda</b><div id="debtorsList" class="mt-8"></div></div>
-     <div class="card card-pad"><b>\ud83c\udfed Proveedores</b><div id="supList" class="mt-8"></div></div>
+     <div class="card card-pad"><b>🧧 Clientes con deuda</b><div id="debtorsList" class="mt-8"></div></div>
+     <div class="card card-pad"><b>🏭 Proveedores</b><div id="supList" class="mt-8"></div></div>
    </div>`;
 
   // Listas
@@ -75,7 +75,7 @@ const PM_LABEL={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',
   document.getElementById('lowStockList').innerHTML = low.length? low.slice(0,6).map(p=>
     `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
       <span>${p.name}</span><span class="badge ${p.stock<=0?'badge-danger':'badge-warn'}">${num(p.stock)} / min ${p.stockMin}</span></div>`).join('')
-    : '<div class="empty">\u2705 Todo el stock est\u00e1 OK</div>';
+    : '<div class="empty">✅ Todo el stock está OK</div>';
 
   const recent=[...valid].sort((a,b)=>b.at-a.at).slice(0,6);
   document.getElementById('recentSales').innerHTML = recent.length? recent.map(s=>{
@@ -83,7 +83,7 @@ const PM_LABEL={efectivo:'Efectivo',debito:'D\u00e9bito',credito:'Cr\u00e9dito',
     return `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
       <div><b>#${s.number}</b> <span class="text-muted" style="font-size:12px">${cl?cl.name+' '+(cl.lastName||''):''}</span><br>
       <span style="font-size:11px;color:var(--text-3)">${fdatetime(s.at)}</span></div>
-      <b class="text-sales">${money(s.total)}</b></div>`; }).join('') : '<div class="empty">Sin ventas a\u00fan</div>';
+      <b class="text-sales">${money(s.total)}</b></div>`; }).join('') : '<div class="empty">Sin ventas aún</div>';
 
   document.getElementById('debtorsList').innerHTML = debtors.length? debtors.slice(0,6).map(c=>
     `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">

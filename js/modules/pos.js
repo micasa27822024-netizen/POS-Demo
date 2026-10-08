@@ -14,7 +14,7 @@ let PRODUCTS=[],CATS=[],CLIENTS=[],activeCat='';
   const user=await requireAuth('pos'); if(!user) return;
   STATE.user=user;
   const view=renderShell('pos','Punto de Venta');
-  view.innerHTML='<div class="loader">Cargando\u2026</div>';
+  view.innerHTML='<div class="loader">Cargando…</div>';
   [PRODUCTS,CATS,CLIENTS]=await Promise.all([DB.list('products'),DB.list('categories'),DB.list('clients')]);
   PRODUCTS=PRODUCTS.filter(p=>p.active!==false);
   render(view);
@@ -26,18 +26,18 @@ function render(view){
   view.innerHTML=`<div class="pos">
     <div class="pos-left">
       <div class="pos-search">
-        <input class="input" id="posSearch" placeholder="\ud83d\udd0d Buscar por nombre o c\u00f3digo" autofocus>
-        <input class="input" id="posBarcode" placeholder="\ud83d\udcf7 C\u00f3digo de barras (Enter)" style="max-width:220px">
+        <input class="input" id="posSearch" placeholder="🔍 Buscar por nombre o código" autofocus>
+        <input class="input" id="posBarcode" placeholder="📷 Código de barras (Enter)" style="max-width:220px">
       </div>
       <div class="pos-cats" id="posCats"></div>
       <div class="pos-grid" id="posGrid"></div>
     </div>
     <div class="cart">
-      <div class="cart-head"><b>\ud83d\uded2 Carrito</b><button class="btn btn-sm btn-ghost" id="clearCart">Vaciar</button></div>
+      <div class="cart-head"><b>🛒 Carrito</b><button class="btn btn-sm btn-ghost" id="clearCart">Vaciar</button></div>
       <div class="cart-client">
         <label style="font-size:11px;color:var(--text-2);font-weight:600">Cliente</label>
         <select class="select" id="cartClient" style="margin-top:4px">
-          ${CLIENTS.map(c=>`<option value="${c.id}" ${c.id===STATE.clientId?'selected':''}>${c.name} ${c.lastName||''}${c.balance>0?' \u2014 debe '+money(c.balance):''}</option>`).join('')}
+          ${CLIENTS.map(c=>`<option value="${c.id}" ${c.id===STATE.clientId?'selected':''}>${c.name} ${c.lastName||''}${c.balance>0?' — debe '+money(c.balance):''}</option>`).join('')}
         </select>
       </div>
       <div class="cart-items" id="cartItems"></div>
@@ -68,10 +68,10 @@ function renderGrid(q){
   let list=PRODUCTS;
   if(activeCat) list=list.filter(p=>p.categoryId===activeCat);
   if(q) list=list.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.code||'').toLowerCase().includes(q)||(p.barcode||'').includes(q));
-  if(!list.length){ grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">\ud83d\udd0d</div>Sin resultados</div>'; return; }
+  if(!list.length){ grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🔍</div>Sin resultados</div>'; return; }
   grid.innerHTML=list.slice(0,120).map(p=>{
     const out=(p.stock||0)<=0;
-    const thumb=p.image?`<img src="${p.image}">`:'\ud83d\udce6';
+    const thumb=p.image?`<img src="${p.image}">`:'📦';
     return `<div class="pcard ${out?'out':''}" data-id="${p.id}"><div class="thumb">${thumb}</div>
       <div class="pinfo"><div class="pname">${p.name}</div><div class="pprice">${money(p.price)}</div>
       <div class="pstock">${out?'Sin stock':'Stock: '+num(p.stock)+' '+p.unit}</div></div></div>`;}).join('');
@@ -81,7 +81,7 @@ function renderGrid(q){
 function addByCode(code){
   if(!code) return;
   const p=PRODUCTS.find(x=>x.barcode===code||x.code===code);
-  if(!p) return warn('No se encontr\u00f3 el producto con c\u00f3digo '+code);
+  if(!p) return warn('No se encontró el producto con código '+code);
   addToCart(p);
 }
 
@@ -100,7 +100,7 @@ function paintCart(){
   const canPrice=can(STATE.user.role,'price.edit');
   const canDisc=can(STATE.user.role,'discount.apply');
   if(!STATE.cart.length){
-    host.innerHTML='<div class="cart-empty"><div><div style="font-size:40px">\ud83d\uded2</div>Carrito vac\u00edo<br><span style="font-size:12px">Toc\u00e1 un producto para agregarlo</span></div></div>';
+    host.innerHTML='<div class="cart-empty"><div><div style="font-size:40px">🛒</div>Carrito vacío<br><span style="font-size:12px">Tocá un producto para agregarlo</span></div></div>';
     foot.innerHTML=`<button class="btn btn-primary w-full" disabled>Cobrar</button>`; return;
   }
   host.innerHTML=STATE.cart.map((it,i)=>{
@@ -108,17 +108,17 @@ function paintCart(){
     const line=+(it.price*it.qty - (it.discount||0)).toFixed(2);
     return `<div class="citem">
       <div style="flex:1"><div class="ci-name">${it.name}</div>
-        <div class="ci-sub">${money(it.price)} / ${it.unit}${it.discount?` \u00b7 desc ${money(it.discount)}`:''}</div>
+        <div class="ci-sub">${money(it.price)} / ${it.unit}${it.discount?` · desc ${money(it.discount)}`:''}</div>
         <div class="flex gap-8 mt-8">
           ${canPrice?`<input class="input" style="width:90px;padding:4px 6px" type="number" step="0.01" value="${it.price}" data-price="${i}" title="Precio">`:''}
           ${canDisc?`<input class="input" style="width:80px;padding:4px 6px" type="number" step="0.01" value="${it.discount||0}" data-disc="${i}" title="Descuento $">`:''}
         </div>
       </div>
-      <div class="qty"><div class="qbtn" data-dec="${i}">\u2212</div>
+      <div class="qty"><div class="qbtn" data-dec="${i}">−</div>
         <input type="number" step="${step}" min="0" value="${it.qty}" data-qty="${i}">
         <div class="qbtn" data-inc="${i}">+</div></div>
       <div class="ci-total">${money(line)}</div>
-      <div class="ci-del" data-del="${i}">\ud83d\uddd1\ufe0f</div></div>`;}).join('');
+      <div class="ci-del" data-del="${i}">🗑️</div></div>`;}).join('');
 
   const t=calcTotals(STATE.cart,STATE.generalDiscount);
   foot.innerHTML=`
@@ -128,7 +128,7 @@ function paintCart(){
     <div class="row"><span>Costo</span><span class="text-muted">${money(t.cost)}</span></div>
     <div class="row"><span>Ganancia est.</span><span class="text-profit">${money(t.profit)}</span></div>
     <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
-    <button class="btn btn-primary w-full" id="btnCheckout" style="padding:14px;font-size:16px">\ud83d\udcb3 Cobrar (F2)</button>`;
+    <button class="btn btn-primary w-full" id="btnCheckout" style="padding:14px;font-size:16px">💳 Cobrar (F2)</button>`;
 
   host.querySelectorAll('[data-qty]').forEach(inp=>inp.onchange=()=>setQty(+inp.dataset.qty,+inp.value));
   host.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>setQty(+b.dataset.inc,STATE.cart[+b.dataset.inc].qty+1));

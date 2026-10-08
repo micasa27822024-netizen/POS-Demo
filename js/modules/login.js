@@ -22,23 +22,23 @@ form.addEventListener('submit',async e=>{
   e.preventDefault();
   const data=validateForm(form,{email:[V.required,V.email],password:[V.required]});
   if(!data) return;
-  const btn=document.getElementById('btnLogin'); btn.disabled=true; btn.textContent='Ingresando\u2026';
+  const btn=document.getElementById('btnLogin'); btn.disabled=true; btn.textContent='Ingresando…';
   try{
     await Auth.login(data.email,data.password);
     await Audit.log('login','auth',{email:data.email});
-    ok('Sesi\u00f3n iniciada'); setTimeout(()=>location.href='dashboard.html',400);
-  }catch(ex){ err(ex.message||'No se pudo iniciar sesi\u00f3n'); btn.disabled=false; btn.textContent='Ingresar'; }
+    ok('Sesión iniciada'); setTimeout(()=>location.href='dashboard.html',400);
+  }catch(ex){ err(ex.message||'No se pudo iniciar sesión'); btn.disabled=false; btn.textContent='Ingresar'; }
 });
 
 document.getElementById('forgot').onclick=()=>{
   const body=document.createElement('div');
-  body.innerHTML=`<p style="color:var(--text-2);margin-bottom:14px">Ingres\u00e1 tu email y te enviaremos instrucciones para restablecer la contrase\u00f1a.</p>
+  body.innerHTML=`<p style="color:var(--text-2);margin-bottom:14px">Ingresá tu email y te enviaremos instrucciones para restablecer la contraseña.</p>
     <div class="field"><label>Email</label><input class="input" id="rpEmail" type="email" placeholder="tu@email.com"><div class="err-msg"></div></div>`;
   const send=document.createElement('button'); send.className='btn btn-primary'; send.textContent='Enviar';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
-  const m=openModal({title:'Recuperar contrase\u00f1a',body,footer:[cancel,send],width:440});
+  const m=openModal({title:'Recuperar contraseña',body,footer:[cancel,send],width:440});
   cancel.onclick=m.close;
   send.onclick=async()=>{ const email=body.querySelector('#rpEmail').value.trim();
     if(!email) return; try{ await Auth.resetPassword(email); m.close();
-      ok('Si el email existe, recibir\u00e1s instrucciones.'); }catch(ex){ err(ex.message); } };
+      ok('Si el email existe, recibirás instrucciones.'); }catch(ex){ err(ex.message); } };
 };

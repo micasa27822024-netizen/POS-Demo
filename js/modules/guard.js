@@ -11,7 +11,7 @@ export async function requireAuth(moduleKey){
   const u=Auth.profile;
   if(!u){ location.href='login.html'; return null; }
   if(moduleKey && !canAccess(u.role,moduleKey)){
-    alert('No ten\u00e9s permiso para acceder a este m\u00f3dulo.');
+    alert('No tenés permiso para acceder a este módulo.');
     location.href='dashboard.html'; return null;
   }
   return u;
