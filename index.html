@@ -1,0 +1,14 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>POS Pro</title>
+<script type="module">
+  import { initTheme } from './js/utils/theme.js';
+  import { initFirebase } from './js/services/firebase.js';
+  import { Auth } from './js/services/auth.service.js';
+  import { ensureSeed } from './js/seed/demo-data.js';
+  initTheme();
+  (async()=>{ await initFirebase(); await ensureSeed(); await Auth.init();
+    location.replace(Auth.profile?'dashboard.html':'login.html'); })();
+</script></head>
+<body style="display:grid;place-items:center;height:100vh;font-family:system-ui">
+<p style="color:#64748b">Cargando POS Pro\u2026</p></body></html>
