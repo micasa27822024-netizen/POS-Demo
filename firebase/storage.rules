@@ -1,0 +1,18 @@
+rules_version = '2';
+// Storage: lectura pública de imágenes de productos (opcional) y escritura
+// solo para usuarios autenticados. Ajustá según tu política de privacidad.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /products/{file=**} {
+      allow read: if true;              // imágenes de catálogo visibles
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024          // máx 5 MB
+        && request.resource.contentType.matches('image/.*');
+    }
+    match /business/{file=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /{all=**} { allow read, write: if false; }
+  }
+}
