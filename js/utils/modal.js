@@ -2,7 +2,7 @@
 export function openModal({title,body,footer,width=560,onClose}){
   const ov=document.createElement('div'); ov.className='modal-ov';
   ov.innerHTML=`<div class="modal" style="max-width:${width}px">
-    <div class="modal-head"><h3></h3><button class="btn btn-icon btn-ghost" data-x>\u2715</button></div>
+    <div class="modal-head"><h3></h3><button class="btn btn-icon btn-ghost" data-x>✕</button></div>
     <div class="modal-body"></div>
     ${footer!==null?'<div class="modal-foot"></div>':''}</div>`;
   ov.querySelector('h3').textContent=title||'';

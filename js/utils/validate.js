@@ -1,11 +1,11 @@
 // Validaciones reutilizables para formularios.
 export const V={
   required:v=>v!==undefined&&v!==null&&String(v).trim()!=='' || 'Campo obligatorio',
-  email:v=>!v||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)||'Email inv\u00e1lido',
-  minLen:(n)=>v=>(v&&v.length>=n)||`M\u00ednimo ${n} caracteres`,
-  numberGte:(n)=>v=>(v!==''&&Number(v)>=n)||`Debe ser \u2265 ${n}`,
-  cuit:v=>!v||/^\d{2}-?\d{8}-?\d{1}$/.test(v)||'CUIT inv\u00e1lido (XX-XXXXXXXX-X)',
-  dni:v=>!v||/^\d{7,8}$/.test(v)||'DNI inv\u00e1lido'
+  email:v=>!v||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)||'Email inválido',
+  minLen:(n)=>v=>(v&&v.length>=n)||`Mínimo ${n} caracteres`,
+  numberGte:(n)=>v=>(v!==''&&Number(v)>=n)||`Debe ser ≥ ${n}`,
+  cuit:v=>!v||/^\d{2}-?\d{8}-?\d{1}$/.test(v)||'CUIT inválido (XX-XXXXXXXX-X)',
+  dni:v=>!v||/^\d{7,8}$/.test(v)||'DNI inválido'
 };
 // Valida un form segun un esquema {campo:[validadores]}. Pinta errores.
 export function validateForm(formEl,schema){

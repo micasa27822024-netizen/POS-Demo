@@ -14,6 +14,6 @@ export function currentTheme(){ return document.documentElement.getAttribute('da
 // Boton reutilizable
 export function themeButton(){
   const b=document.createElement('button'); b.className='btn btn-icon btn-ghost'; b.title='Cambiar tema';
-  const paint=()=>b.textContent=currentTheme()==='dark'?'\u2600':'\u263E';
+  const paint=()=>b.textContent=currentTheme()==='dark'?'☀':'☾';
   paint(); b.onclick=()=>{toggleTheme();paint();}; return b;
 }
