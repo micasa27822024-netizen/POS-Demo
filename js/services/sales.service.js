@@ -5,12 +5,12 @@ import { Products } from './products.service.js';
 import { Audit } from './audit.service.js';
 
 export const PAYMENT_METHODS=[
-  {v:'efectivo',l:'Efectivo',ic:'\ud83d\udcb5'},
-  {v:'debito',l:'Tarjeta d\u00e9bito',ic:'\ud83d\udcb3'},
-  {v:'credito',l:'Tarjeta cr\u00e9dito',ic:'\ud83d\udcb3'},
-  {v:'transferencia',l:'Transferencia',ic:'\ud83c\udfe6'},
-  {v:'cuenta_corriente',l:'Cuenta corriente',ic:'\ud83e\udde7'},
-  {v:'otros',l:'Otros',ic:'\u2022'}
+  {v:'efectivo',l:'Efectivo',ic:'💵'},
+  {v:'debito',l:'Tarjeta débito',ic:'💳'},
+  {v:'credito',l:'Tarjeta crédito',ic:'💳'},
+  {v:'transferencia',l:'Transferencia',ic:'🏦'},
+  {v:'cuenta_corriente',l:'Cuenta corriente',ic:'🧧'},
+  {v:'otros',l:'Otros',ic:'•'}
 ];
 
 // Unidades que admiten cantidades decimales.
@@ -51,13 +51,13 @@ export const Sales={
   // 1) crea la venta  2) descuenta stock  3) registra pagos
   // 4) actualiza caja (efectivo)  5) actualiza cuenta corriente del cliente.
   async confirm({items,generalDiscount=0,payments,clientId,client,user,cashReceived=0}){
-    if(!items||!items.length) throw new Error('El carrito est\u00e1 vac\u00edo');
+    if(!items||!items.length) throw new Error('El carrito está vacío');
     const t=calcTotals(items,generalDiscount);
     const paid=payments.reduce((s,p)=>s+(+p.amount||0),0);
     const ccAmount=payments.filter(p=>p.method==='cuenta_corriente').reduce((s,p)=>s+(+p.amount||0),0);
     // Validación: lo pagado (sin contar vuelto) debe cubrir el total.
     if(+paid.toFixed(2) < t.total) throw new Error('El pago no cubre el total de la venta');
-    if(ccAmount>0 && !clientId) throw new Error('Para cuenta corriente deb\u00e9s seleccionar un cliente');
+    if(ccAmount>0 && !clientId) throw new Error('Para cuenta corriente debés seleccionar un cliente');
 
     const cashApplied=payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+(+p.amount||0),0);
     const number=await nextNumber();
