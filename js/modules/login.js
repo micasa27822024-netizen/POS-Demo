@@ -1,0 +1,44 @@
+import { initTheme, themeButton } from '../utils/theme.js';
+import { initFirebase } from '../services/firebase.js';
+import { Auth } from '../services/auth.service.js';
+import { ensureSeed } from '../seed/demo-data.js';
+import { validateForm, V } from '../utils/validate.js';
+import { toast, ok, err } from '../utils/toast.js';
+import { openModal } from '../utils/modal.js';
+import { Audit } from '../services/audit.service.js';
+
+initTheme();
+document.getElementById('themeSlot').appendChild(themeButton());
+
+(async()=>{ await initFirebase(); await ensureSeed(); await Auth.init();
+  if(Auth.profile) location.replace('dashboard.html'); })();
+
+const form=document.getElementById('loginForm');
+document.getElementById('togglePw').onclick=()=>{
+  const i=form.password; i.type=i.type==='password'?'text':'password';
+};
+
+form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const data=validateForm(form,{email:[V.required,V.email],password:[V.required]});
+  if(!data) return;
+  const btn=document.getElementById('btnLogin'); btn.disabled=true; btn.textContent='Ingresando\u2026';
+  try{
+    await Auth.login(data.email,data.password);
+    await Audit.log('login','auth',{email:data.email});
+    ok('Sesi\u00f3n iniciada'); setTimeout(()=>location.href='dashboard.html',400);
+  }catch(ex){ err(ex.message||'No se pudo iniciar sesi\u00f3n'); btn.disabled=false; btn.textContent='Ingresar'; }
+});
+
+document.getElementById('forgot').onclick=()=>{
+  const body=document.createElement('div');
+  body.innerHTML=`<p style="color:var(--text-2);margin-bottom:14px">Ingres\u00e1 tu email y te enviaremos instrucciones para restablecer la contrase\u00f1a.</p>
+    <div class="field"><label>Email</label><input class="input" id="rpEmail" type="email" placeholder="tu@email.com"><div class="err-msg"></div></div>`;
+  const send=document.createElement('button'); send.className='btn btn-primary'; send.textContent='Enviar';
+  const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
+  const m=openModal({title:'Recuperar contrase\u00f1a',body,footer:[cancel,send],width:440});
+  cancel.onclick=m.close;
+  send.onclick=async()=>{ const email=body.querySelector('#rpEmail').value.trim();
+    if(!email) return; try{ await Auth.resetPassword(email); m.close();
+      ok('Si el email existe, recibir\u00e1s instrucciones.'); }catch(ex){ err(ex.message); } };
+};
