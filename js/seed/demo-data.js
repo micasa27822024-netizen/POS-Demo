@@ -12,9 +12,9 @@ export const DEMO={
     {id:'u_caj',name:'Pedro Cajero',email:'cajero@pos.com',role:'cajero',active:true,demoPassword:'caj123',createdAt:now-10*day,lastLogin:now-2*day}
   ],
   categories:[
-    {id:'c_alm',name:'Almac\u00e9n',color:'#f59e0b',demo:true},
+    {id:'c_alm',name:'Almacén',color:'#f59e0b',demo:true},
     {id:'c_beb',name:'Bebidas',color:'#2563eb',demo:true},
-    {id:'c_lac',name:'L\u00e1cteos',color:'#0891b2',demo:true},
+    {id:'c_lac',name:'Lácteos',color:'#0891b2',demo:true},
     {id:'c_lim',name:'Limpieza',color:'#16a34a',demo:true}
   ],
   subcategories:[
@@ -27,8 +27,8 @@ export const DEMO={
     {id:'sup_2',legalName:'Lacteos del Litoral SRL',tradeName:'LitoralLac',cuit:'30-98765432-1',phone:'3794-333444',email:'pedidos@litorallac.com',address:'Ruta 12 Km 5',city:'Resistencia',province:'Chaco',active:true,demo:true}
   ],
   clients:[
-    {id:'cl_1',name:'Juan',lastName:'P\u00e9rez',dni:'30111222',phone:'3794-555666',email:'juan@mail.com',city:'Corrientes',province:'Corrientes',creditLimit:50000,balance:12500,active:true,createdAt:now-15*day,demo:true},
-    {id:'cl_2',name:'Mar\u00eda',lastName:'G\u00f3mez',dni:'28999888',phone:'3794-777888',email:'maria@mail.com',city:'Resistencia',province:'Chaco',creditLimit:30000,balance:0,active:true,createdAt:now-8*day,demo:true},
+    {id:'cl_1',name:'Juan',lastName:'Pérez',dni:'30111222',phone:'3794-555666',email:'juan@mail.com',city:'Corrientes',province:'Corrientes',creditLimit:50000,balance:12500,active:true,createdAt:now-15*day,demo:true},
+    {id:'cl_2',name:'María',lastName:'Gómez',dni:'28999888',phone:'3794-777888',email:'maria@mail.com',city:'Resistencia',province:'Chaco',creditLimit:30000,balance:0,active:true,createdAt:now-8*day,demo:true},
     {id:'cl_3',name:'Consumidor',lastName:'Final',dni:'',phone:'',email:'',creditLimit:0,balance:0,active:true,createdAt:now-40*day,demo:true}
   ],
   products:[
