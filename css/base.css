@@ -18,6 +18,7 @@ img{display:block;max-width:100%}
 .gap-8{gap:8px}.gap-12{gap:12px}.gap-16{gap:16px}.gap-24{gap:24px}
 .mt-8{margin-top:8px}.mt-16{margin-top:16px}.mt-24{margin-top:24px}
 .w-full{width:100%}.text-right{text-align:right}.text-center{text-align:center}
+.ta-right{text-align:right}.ta-center{text-align:center}.ta-left{text-align:left}
 .spin{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
