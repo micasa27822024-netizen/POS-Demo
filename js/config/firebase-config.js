@@ -19,8 +19,9 @@
 // ============================================================================
 
 export const firebaseConfig = {
- apiKey: "AIzaSyC3puce9bd4baPA0kf9Kk1j1lnutreg6aU",
+  apiKey: "AIzaSyC3puce9bd4baPA0kf9Kk1j1lnutreg6aU",
   authDomain: "pos-demo-e7d18.firebaseapp.com",
+  databaseURL: "https://pos-demo-e7d18-default-rtdb.firebaseio.com",
   projectId: "pos-demo-e7d18",
   storageBucket: "pos-demo-e7d18.firebasestorage.app",
   messagingSenderId: "723358989416",
