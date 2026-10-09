@@ -2,6 +2,33 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.6] — Reportes que cuadran con el Dashboard
+
+Se corrige el cálculo de Reportes para que los números cierren entre sí y
+coincidan con el Dashboard. El problema era cómo se contaban las devoluciones.
+
+- **Las devoluciones ahora restan en el día en que se hacen** (no en el día de
+  la venta original). Antes, si vendías un día y la devolución caía en otro
+  período, Reportes y Dashboard mostraban cifras distintas. Ahora usan el mismo
+  criterio, así que **siempre coinciden**.
+- **Los medios de pago cuadran con la facturación**: antes, el detalle por medio
+  de pago mostraba el monto bruto (sin descontar devoluciones), por eso su suma
+  no daba igual que la «Facturación». Ahora cada reintegro se descuenta del
+  medio de pago correspondiente y **la suma de los medios de pago es igual a la
+  facturación**.
+- **Productos y columna «Facturado» netos**: el ranking de productos descuenta
+  lo devuelto (cantidad e importe) y reparte el descuento general igual que en
+  las devoluciones, de modo que la suma de la columna «Facturado» también
+  coincide con la facturación total.
+- **«Por vendedor» más justo**: la devolución se descuenta del vendedor que hizo
+  la venta original (cuando está en el período), no del cajero que procesa la
+  devolución.
+- **CSV de ventas con más detalle**: se agregaron las columnas «Devuelto» y
+  «Total neto» para que cada comprobante muestre cuánto se devolvió y su neto.
+- **Pruebas**: nuevas pruebas automatizadas (`tests/report-calc.test.mjs`) que
+  verifican el invariante «medios de pago = facturación», el prorrateo del
+  descuento general y el conteo de devoluciones por su fecha.
+
 ## [1.1.5] — El respaldo ahora incluye las cuentas por pagar
 
 Se completa el respaldo total del sistema para que no quede nada afuera.

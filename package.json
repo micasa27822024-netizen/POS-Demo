@@ -1,6 +1,6 @@
 {
   "name": "pos-pro",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "POS Pro — sistema de punto de venta web (HTML/CSS/JS ESM + Firebase).",
   "private": true,
   "type": "module",
