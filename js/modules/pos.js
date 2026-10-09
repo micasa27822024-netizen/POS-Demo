@@ -8,6 +8,9 @@ import { can } from '../services/permissions.js';
 import { openPayment, showTicket } from './pos-pay.js';
 import { esc } from '../utils/escape.js';
 import { DEMO_MODE } from '../config/firebase-config.js';
+// B1: caché incremental — el POS ya no baja TODOS los productos y clientes en cada
+// apertura; solo sincroniza lo cambiado desde la última vez.
+import { syncCollection } from '../utils/collection-cache.js';
 
 export let STATE={cart:[],generalDiscount:0,clientId:'',user:null};
 let PRODUCTS=[],CATS=[],CLIENTS=[],activeCat='';
@@ -24,7 +27,7 @@ const offlineBlocks = () => !DEMO_MODE && !ONLINE;
   const view=renderShell('pos','Punto de Venta');
   view.innerHTML='<div class="loader">Cargando…</div>';
   const [prods,cats,clients,biz,regs]=await Promise.all([
-    DB.list('products'),DB.list('categories'),DB.list('clients'),
+    syncCollection('products'),DB.list('categories'),syncCollection('clients'),
     DB.get('settings','business').catch(()=>null),
     DB.list('cashRegisters',{where:[['status','==','abierta']]})
   ]);

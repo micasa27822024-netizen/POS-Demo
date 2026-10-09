@@ -4,6 +4,7 @@ import { DB } from '../services/db.service.js';
 import { money, num, fdatetime, dayStart, monthStart, dayKeyAR } from '../utils/format.js';
 import { currentTheme } from '../utils/theme.js';
 import { esc } from '../utils/escape.js';
+import { aggregateDaily, topProductIds } from '../services/dashboard-agg.js';
 
 const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',cuenta_corriente:'Cta. Corriente',otros:'Otros'};
 
@@ -12,21 +13,25 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   const view=renderShell('dashboard','Dashboard');
   view.innerHTML='<div class="loader">Cargando panel…</div>';
 
-  // B1: lecturas acotadas. Los agregados diarios salen de `dailyStats`
-  // (ya netos de anulaciones). El detalle de ítems se consulta solo para los
-  // últimos 30 días; los deudores por filtro de saldo; stock por productos.
+  // B1: lecturas acotadas. Antes el Dashboard bajaba hasta 3.000 ventas + 2.000
+  // productos (~5.000 lecturas por apertura). Ahora los agregados (rankings y
+  // medios de pago) salen de `dailyStats`, las últimas ventas son 12 documentos y
+  // las alertas de stock consultan SOLO los productos a reponer (needsRestock==true).
   const iso=d=>dayKeyAR(d);
   const now=Date.now();
-  const cutoff30=now-30*864e5;
-  const cutoffStr=iso(cutoff30);
-  const [dstats,recentDetail,products,debtors,suppliers,categories]=await Promise.all([
+  const cutoffStr=iso(now-30*864e5);
+  const [dstats,recent,lowProducts,debtors,suppliers,categories]=await Promise.all([
     DB.list('dailyStats',{where:[['date','>=',cutoffStr]],orderBy:['date','asc']}),
-    DB.list('sales',{where:[['at','>=',cutoff30]],orderBy:['at','desc'],limit:3000}),
-    DB.list('products',{limit:2000}),
+    DB.list('sales',{orderBy:['at','desc'],limit:12}),
+    DB.list('products',{where:[['needsRestock','==',true]],limit:500}),
     DB.list('clients',{where:[['balance','>',0]],limit:500}),
     DB.list('suppliers',{limit:6}),
     DB.list('categories',{limit:300})
   ]);
+  const {prodQty,catAmt,payTotals}=aggregateDaily(dstats);
+  // Nombres de los 5 más vendidos: 5 lecturas puntuales, no toda la tabla de productos.
+  const topIds=topProductIds(prodQty,5);
+  const topDocs=await Promise.all(topIds.map(id=>DB.get('products',id).catch(()=>null)));
 
   const todayStr=iso(now);
   const monthPrefix=todayStr.slice(0,7); // YYYY-MM
@@ -41,19 +46,19 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   const todayCount=td.salesCount||0;
   const monthCount=msum('salesCount');
 
-  // Métodos de pago: suma de los campos pm_* de los últimos 30 días.
-  const payTotals={};
-  dstats.forEach(d=>{ for(const k in d){ if(k.startsWith('pm_')){ const m=k.slice(3); payTotals[m]=(payTotals[m]||0)+(d[k]||0); } } });
+  // Métodos de pago: ya consolidados por aggregateDaily (campos pm_* de 30 días).
   const cash=payTotals.efectivo||0, card=(payTotals.debito||0)+(payTotals.credito||0), cc=payTotals.cuenta_corriente||0;
 
-  const valid=recentDetail.filter(s=>s.status!=='anulada'); // detalle 30d para rankings
-  const lowStock=products.filter(p=>p.active!==false && p.stock>0 && p.stock<=p.stockMin);
-  const noStock=products.filter(p=>p.active!==false && (p.stock||0)<=0);
+  // Alertas de stock: la consulta ya trajo SOLO los productos que necesitan reposición.
+  const lowAll=lowProducts.filter(p=>p.active!==false);
+  const noStock=lowAll.filter(p=>(p.stock||0)<=0);
+  const lowStock=lowAll.filter(p=>(p.stock||0)>0);
 
-  // Productos más vendidos (últimos 30 días)
-  const prodQty={}; valid.forEach(s=>(s.items||[]).forEach(it=>prodQty[it.productId]=(prodQty[it.productId]||0)+it.qty));
-  const topProducts=Object.entries(prodQty).map(([id,q])=>({p:products.find(x=>x.id===id),q}))
-    .filter(x=>x.p).sort((a,b)=>b.q-a.q).slice(0,5);
+  // Productos más vendidos (30 días) desde los agregados de dailyStats.
+  const topProducts=topIds.map((id,i)=>({p:topDocs[i]||{id,name:'(sin nombre)'},q:prodQty[id]})).filter(x=>x.q>0);
+
+  // Últimas ventas no anuladas (de los 12 documentos más recientes).
+  const recentValid=recent.filter(s=>s.status!=='anulada');
 
   const stat=(ic,color,label,value,sub)=>`<div class="stat fade-in"><div class="ic" style="background:${color}">${ic}</div>
     <div class="label">${label}</div><div class="value">${value}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
@@ -97,8 +102,8 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
       <span>${esc(p.name)}</span><span class="badge ${p.stock<=0?'badge-danger':'badge-warn'}">${num(p.stock)} / min ${p.stockMin}</span></div>`).join('')
     : '<div class="empty">✅ Todo el stock está OK</div>';
 
-  const recent=[...valid].sort((a,b)=>b.at-a.at).slice(0,6);
-  document.getElementById('recentSales').innerHTML = recent.length? recent.map(s=>{
+  const recentList=recentValid.slice(0,6);
+  document.getElementById('recentSales').innerHTML = recentList.length? recentList.map(s=>{
     return `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
       <div><b>#${esc(String(s.number))}</b> <span class="text-muted" style="font-size:12px">${esc(s.clientName||'Consumidor Final')}</span><br>
       <span style="font-size:11px;color:var(--text-3)">${fdatetime(s.at)}</span></div>
@@ -134,9 +139,7 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
     datasets:[{data:pmKeys.map(k=>payTotals[k]),backgroundColor:['#059669','#2563eb','#9333ea','#f59e0b','#db2777','#64748b']}]},
     options:{plugins:{legend:{position:'bottom'}}}});
 
-  const catTot={}; valid.forEach(s=>(s.items||[]).forEach(it=>{const p=products.find(x=>x.id===it.productId);
-    const cid=p?.categoryId; const c=categories.find(x=>x.id===cid); const nm=c?c.name:'Otros';
-    catTot[nm]=(catTot[nm]||0)+it.total;}));
+  const catTot={}; for(const cid in catAmt){ const c=categories.find(x=>x.id===cid); const nm=c?c.name:'Otros'; catTot[nm]=(catTot[nm]||0)+catAmt[cid]; }
   new Chart(document.getElementById('chCat'),{type:'bar',data:{labels:Object.keys(catTot),
     datasets:[{label:'$',data:Object.values(catTot),backgroundColor:'#0891b2',borderRadius:6}]},
     options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});

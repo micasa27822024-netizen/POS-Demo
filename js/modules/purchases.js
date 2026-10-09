@@ -3,6 +3,7 @@ import { requireAuth } from './guard.js';
 import { renderShell } from '../components/shell.js';
 import { DB } from '../services/db.service.js';
 import { Products } from '../services/products.service.js';
+import { needsRestock } from '../services/stock-flags.js';
 import { openModal } from '../utils/modal.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
@@ -112,7 +113,8 @@ async function confirmPurchase({supplierId,invoice,paid,method}){
       items,total,paid:paidReal,debt,method,status:'completada',userId:USER.id,userName:USER.name,at:Date.now()});
     for(const it of items){ const p=prod[it.productId];
       const newStock=+(((p&&+p.stock)||0)+it.qty).toFixed(3);
-      tx.update('products',it.productId,{stock:DB.increment(it.qty),cost:it.cost,updatedAt:Date.now()});
+      tx.update('products',it.productId,{stock:DB.increment(it.qty),cost:it.cost,
+        needsRestock:needsRestock({active:p&&p.active,stock:newStock,stockMin:p&&p.stockMin}),updatedAt:Date.now()});
       tx.add('stockMovements',{productId:it.productId,productName:(p&&p.name)||it.name,type:'compra',qty:it.qty,delta:it.qty,
         stockAfter:newStock,reason:'Compra #'+number,userId:USER.id,userName:USER.name,refId:purchaseId,at:Date.now()});
     }
