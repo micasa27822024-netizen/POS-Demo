@@ -8,6 +8,8 @@ import { calcTotals, DECIMAL_UNITS, isDecimalUnit } from './sales-calc.js';
 export { calcTotals, DECIMAL_UNITS, isDecimalUnit };
 import { calcReturn } from './sales-calc.js';
 import { dayKeyAR } from '../utils/format.js';
+// B1: bandera de reposición (para que el Dashboard consulte solo lo que falta reponer).
+import { needsRestock } from './stock-flags.js';
 // C1: interfaz de facturación electrónica (preparación sin backend).
 import { Fiscal, fiscalDefault } from './fiscal.service.js';
 export { Fiscal };
@@ -93,7 +95,8 @@ export const Sales={
       });
       for(const it of items){ const p=prod[it.productId];
         const newStock=+((+p.stock||0)-it.qty).toFixed(3);
-        tx.update('products',it.productId,{stock:DB.increment(-it.qty),updatedAt:Date.now()});
+        tx.update('products',it.productId,{stock:DB.increment(-it.qty),
+          needsRestock:needsRestock({active:p.active,stock:newStock,stockMin:p.stockMin}),updatedAt:Date.now()});
         tx.add('stockMovements',{productId:it.productId,productName:p.name,type:'venta',qty:it.qty,delta:-it.qty,
           stockAfter:newStock,reason:'Venta #'+number,userId:user.id,userName:user.name,refId:saleId,at:Date.now()});
       }
@@ -110,6 +113,14 @@ export const Sales={
       const dsPatch={date:dayKey,salesCount:DB.increment(1),total:DB.increment(t.total),
         cost:DB.increment(t.cost),profit:DB.increment(t.profit)};
       for(const p of payments){ dsPatch['pm_'+p.method]=DB.increment(+p.amount||0); }
+      // B1: agregados por producto y categoría para los rankings del Dashboard
+      // (evita leer todas las ventas del mes para armarlos).
+      for(const it of items){ const pr=prod[it.productId];
+        dsPatch['tp_'+it.productId]=DB.increment(+it.qty||0);
+        const cid=(pr&&pr.categoryId)||'none';
+        const lineAmt=+(((+it.price||0)*(+it.qty||0))-(+it.discount||0)).toFixed(2);
+        dsPatch['tc_'+cid]=DB.increment(lineAmt);
+      }
       tx.set('dailyStats',dayKey,dsPatch);
       const sale={id:saleId,number,items,...t,discount:t.itemDiscount+t.generalDiscount,
         clientId:clientId||null,userId:user.id,userName:user.name,status:'completada',at:Date.now()};
@@ -177,7 +188,8 @@ export const Sales={
         userId:user.id,userName:user.name,at:Date.now()});
       for(const d of detail){ const p=prod[d.productId];
         const newStock=+(((p&&+p.stock)||0)+d.qty).toFixed(3);
-        tx.update('products',d.productId,{stock:DB.increment(d.qty),updatedAt:Date.now()});
+        tx.update('products',d.productId,{stock:DB.increment(d.qty),
+          needsRestock:needsRestock({active:p&&p.active,stock:newStock,stockMin:p&&p.stockMin}),updatedAt:Date.now()});
         tx.add('stockMovements',{productId:d.productId,productName:(p&&p.name)||d.name,type:'devolucion',
           qty:d.qty,delta:d.qty,stockAfter:newStock,reason:'Devolución venta #'+s.number,
           userId:user.id,userName:user.name,refId:saleId,at:Date.now()});
@@ -206,6 +218,13 @@ export const Sales={
       const dsPatch={date:dayKey,returnsCount:DB.increment(1),returnsTotal:DB.increment(refundTotal),
         total:DB.increment(-refundTotal),cost:DB.increment(-costTotal),profit:DB.increment(-profitTotal)};
       dsPatch['pm_'+method]=DB.increment(-refundTotal);
+      // B1: descuenta de los agregados por producto/categoría lo devuelto
+      // (mantiene los rankings del Dashboard netos de devoluciones).
+      for(const d of detail){ const p=prod[d.productId];
+        dsPatch['tp_'+d.productId]=DB.increment(-(+d.qty||0));
+        const cid=(p&&p.categoryId)||'none';
+        dsPatch['tc_'+cid]=DB.increment(-(+d.refund||0));
+      }
       tx.set('dailyStats',dayKey,dsPatch);
       Audit.log('sale.return','sale',{id:saleId,number:s.number,refund:refundTotal,reason:reason.trim()});
       return {id:retId,saleId,number:s.number,refundTotal,lines:detail};
