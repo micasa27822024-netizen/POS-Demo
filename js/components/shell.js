@@ -2,6 +2,7 @@
 import { Auth } from '../services/auth.service.js';
 import { canAccess, ROLES } from '../services/permissions.js';
 import { themeButton } from '../utils/theme.js';
+import { esc } from '../utils/escape.js';
 
 const NAV=[
   {g:'Principal',items:[
@@ -48,7 +49,7 @@ export function renderShell(active,title){
       <nav class="nav">${navHtml}</nav>
       <div class="foot">
         <div class="user-card"><div class="av">${initials}</div>
-          <div style="flex:1"><div class="nm">${u?.name||'Usuario'}</div><div class="rl">${ROLES[role]?.label||role}</div></div>
+          <div style="flex:1"><div class="nm">${esc(u?.name||'Usuario')}</div><div class="rl">${esc(ROLES[role]?.label||role)}</div></div>
           <button class="btn btn-icon btn-ghost" id="btnLogout" title="Cerrar sesión">⏻</button>
         </div>
       </div>
@@ -59,7 +60,7 @@ export function renderShell(active,title){
         <div class="page-title">${title||''}</div>
         <div class="search"><i>🔍</i><input id="globalSearch" placeholder="Buscar productos, clientes, ventas..."></div>
         <div id="themeSlot"></div>
-        <div class="avatar" title="${u?.email||''}">${initials}</div>
+        <div class="avatar" title="${esc(u?.email||'')}">${esc(initials)}</div>
       </header>
       <main class="content" id="view"></main>
     </div>
