@@ -2,6 +2,48 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.8] — Los cajeros vuelven a poder cobrar (arreglo crítico)
+
+Un arreglo anterior hizo que, al vender, el sistema guardara en el producto una
+señal nueva (si hace falta reponerlo). Pero los permisos de seguridad del cajero
+**no** permitían escribir ese dato: solo lo descontado de stock. Resultado: en
+producción, **a un cajero se le podía rechazar la venta entera** (error de
+permisos), sobre todo con productos cargados antes de esa versión o cuando el
+stock cruzaba el mínimo. En modo demo no se notaba porque ahí no rigen los
+permisos.
+
+- **Se corrigen los permisos de seguridad** para que el cajero pueda guardar la
+  señal de reposición junto con el stock al vender. **La venta del cajero vuelve
+  a funcionar.**
+- La protección se mantiene: el cajero **sigue sin poder subir el stock** ni
+  tocar precios u otros datos del producto. Solo descontar al vender.
+- Se agregaron pruebas de permisos que cubren justo este caso (vender
+  descontando stock + señal de reposición, y que no se pueda inflar el stock).
+
+> Importante: para que este arreglo tenga efecto hay que **publicar las reglas
+> de seguridad actualizadas** en tu proyecto de Firebase (las de la carpeta
+> `firebase/firestore.rules`). El código de la app ya quedó listo.
+
+## [1.1.7] — El candado de facturación ya no se traba
+
+Cuando se pide el CAE a AFIP/ARCA, el sistema pone un «candado» en la venta para
+que no se emitan dos comprobantes a la vez (por ejemplo, por doble clic). El
+problema era que, si justo en ese momento se cortaba internet, se cerraba el
+navegador o el servicio se colgaba, la venta quedaba «solicitando CAE» **para
+siempre** y ya no se le podía emitir el comprobante nunca más.
+
+- **El candado ahora vence a los 2 minutos.** Si una solicitud quedó colgada por
+  un corte o un cierre inesperado, pasados 2 minutos se considera abandonada y
+  **podés volver a pedir el CAE con normalidad**. Ya no hay ventas trabadas.
+- **Dos pedidos a la vez siguen protegidos.** Si realmente hay una solicitud en
+  curso (reciente), el sistema la respeta y avisa en cuántos segundos podés
+  reintentar. Así se evita pedir dos CAE para la misma venta.
+- **Las ventas que ya estaban trabadas se destraban solas.** Las que quedaron en
+  «solicitando» de antes se liberan al primer reintento, sin tener que tocar
+  nada a mano.
+- Cuando el sistema retoma una solicitud abandonada, queda registrado en la
+  Auditoría para que haya trazabilidad.
+
 ## [1.1.6] — Reportes que cuadran con el Dashboard
 
 Se corrige el cálculo de Reportes para que los números cierren entre sí y
