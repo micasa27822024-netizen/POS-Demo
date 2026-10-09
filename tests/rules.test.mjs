@@ -71,8 +71,15 @@ test('Rules · matriz de permisos (sección 7)', { skip: !rut ? 'emulador/libs a
       await s(d(ctx.firestore(), 'products', 'pStock'), { name: 'S', stock: 10 });
     });
     await assertSucceeds(updateDoc(doc(asUser('caj1'), 'products', 'pStock'), { stock: 9, updatedAt: Date.now() }));
+    // La venta también recalcula la bandera de reposición (needsRestock): el
+    // cajero DEBE poder escribirla junto con stock+updatedAt (regresión punto A).
+    await assertSucceeds(updateDoc(doc(asUser('caj1'), 'products', 'pStock'),
+      { stock: 8, updatedAt: Date.now(), needsRestock: true }));
     // No puede cambiar otros campos ni subir el stock arbitrariamente.
     await assertFails(updateDoc(doc(asUser('caj1'), 'products', 'pStock'), { price: 999 }));
+    // needsRestock NO habilita subir el stock de contrabando.
+    await assertFails(updateDoc(doc(asUser('caj1'), 'products', 'pStock'),
+      { stock: 999, updatedAt: Date.now(), needsRestock: false }));
   });
 
   await t.test('solo admin administra usuarios y settings', async () => {
