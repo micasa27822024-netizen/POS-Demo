@@ -57,6 +57,15 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
+    // --- Devoluciones (C3): solo staff (admin/encargado) registra devoluciones ---
+    // Son inmutables una vez creadas (igual que la auditoría).
+    match /returns/{id} {
+      allow read: if anyRole();
+      allow create: if isStaff()
+        && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // --- Compras y proveedores: staff ---
     match /purchases/{id}  { allow read: if anyRole(); allow write: if isStaff(); }
     match /suppliers/{id}  { allow read: if anyRole(); allow write: if isStaff(); }
