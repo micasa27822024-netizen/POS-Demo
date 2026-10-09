@@ -37,6 +37,7 @@ function render(view){
      <div class="flex gap-8">
        <button class="btn btn-ghost" id="btnImport">⬆️ Importar</button>
        <button class="btn btn-ghost" id="btnExport">⬇️ Exportar</button>
+       ${can(USER.role,'*')?'<button class="btn btn-ghost" id="btnRecalc" title="Recalcula las alertas de reposición para todo el catálogo">🔄 Recalcular reposición</button>':''}
        ${editable?'<button class="btn btn-primary" id="btnNew">➕ Nuevo producto</button>':''}
      </div></div>
    <div class="toolbar">
@@ -50,6 +51,8 @@ function render(view){
   if(editable) document.getElementById('btnNew').onclick=()=>openForm();
   document.getElementById('btnExport').onclick=doExport;
   document.getElementById('btnImport').onclick=doImport;
+  const btnRecalc=document.getElementById('btnRecalc');
+  if(btnRecalc) btnRecalc.onclick=doRecalc;
   const fq=document.getElementById('fq');
   fq.oninput=e=>{filter.q=e.target.value.toLowerCase();paint();};
   document.getElementById('fcat').onchange=e=>{filter.cat=e.target.value;paint();};
@@ -175,6 +178,21 @@ function openForm(p){
       await reload(); m.close(); ok(isEdit?'Producto actualizado':'Producto creado'); paint();
     }catch(ex){ err(ex.message||'No se pudo guardar'); }
   };
+}
+
+// Punto C: recálculo único de las alertas de reposición (solo admin). Corrige la
+// bandera `needsRestock` de los productos que estaban desactualizados — típico de
+// artículos que ya estaban bajo el mínimo pero nunca se movieron.
+async function doRecalc(){
+  const btn=document.getElementById('btnRecalc');
+  if(btn) btn.disabled=true;
+  try{
+    const n=await Products.recalcRestockFlags();
+    await reload(); paint();
+    ok(n?('Alertas de reposición actualizadas: '+n+' producto(s) corregido(s)')
+        :'Las alertas de reposición ya estaban al día');
+  }catch(ex){ err(ex.message||'No se pudo recalcular'); }
+  finally{ if(btn) btn.disabled=false; }
 }
 
 function doExport(){

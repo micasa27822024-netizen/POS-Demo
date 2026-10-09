@@ -25,6 +25,9 @@ async function load(){
   BIZ=(await DB.get('settings','business'))||{name:'Mi Comercio POS'};
   const saved=(await DB.get('settings','invoice'))||{};
   CFG={...DEF,...saved}; delete CFG.id;
+  // Sin facturación electrónica conectada, TODO comprobante es interno «X».
+  // Forzamos el tipo aunque una config vieja tuviera A/B/C guardado.
+  CFG.tipo='X';
   SALES=(await DB.list('sales')).filter(s=>s.status!=='anulada').sort((a,b)=>b.at-a.at).slice(0,50);
   selId=SALES[0]?.id||'';
 }
@@ -57,8 +60,9 @@ function invoiceHtml(s){
         ${BIZ.cuit?'CUIT: '+esc(BIZ.cuit)+'<br>':''}${BIZ.phone?'Tel: '+esc(BIZ.phone):''}<br>
         <span style="font-size:11px;color:#555">${esc(CFG.condicionIva)}</span></div>
       <div style="width:60px;border-left:1px solid #333;border-right:1px solid #333;display:flex;flex-direction:column;align-items:center;justify-content:center">
-        <div style="font-size:30px;font-weight:800;line-height:1">${esc(CFG.tipo)}</div><div style="font-size:9px">COD. ${CFG.tipo==='X'?'99':CFG.tipo==='A'?'01':CFG.tipo==='B'?'06':'11'}</div></div>
-      <div style="flex:1;padding:14px"><b style="font-size:15px">${CFG.tipo==='X'?'COMPROBANTE':'FACTURA'}</b><br>
+        <div style="font-size:30px;font-weight:800;line-height:1">X</div><div style="font-size:9px">COD. 99</div></div>
+      <div style="flex:1;padding:14px"><b style="font-size:15px">COMPROBANTE INTERNO</b><br>
+        <span style="display:inline-block;margin:2px 0;font-size:10px;font-weight:700;color:#b00020;border:1px solid #b00020;border-radius:3px;padding:1px 5px">NO VÁLIDO COMO FACTURA</span><br>
         N° ${compNumber(s)}<br>Fecha: ${new Date(s.at).toLocaleDateString('es-AR')}<br>
         <span style="font-size:11px;color:#555">Original</span></div></div>
     <div style="border:1px solid #333;border-top:0;padding:10px 14px;font-size:12px">
@@ -71,7 +75,9 @@ function invoiceHtml(s){
       ${CFG.discriminaIva?`<div style="display:flex;justify-content:space-between"><span>Neto gravado</span><span>${money(neto)}</span></div>
         <div style="display:flex;justify-content:space-between"><span>IVA ${CFG.ivaPct}%</span><span>${money(iva)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;border-top:2px solid #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${money(s.total)}</span></div></div>
-    <div style="margin-top:18px;font-size:10.5px;color:#666;border-top:1px dashed #999;padding-top:8px">${esc(CFG.legend)}</div>
+    <div style="margin-top:18px;border-top:1px dashed #999;padding-top:8px">
+      <div style="font-size:11px;font-weight:700;color:#b00020">DOCUMENTO NO VÁLIDO COMO FACTURA — Comprobante interno de venta.</div>
+      <div style="font-size:10.5px;color:#666;margin-top:3px">${esc(CFG.legend)}</div></div>
     ${caeFooter(s)}
   </div>`;
 }
@@ -95,7 +101,9 @@ function render(view){
       <button class="btn btn-primary" id="btnSave">💾 Guardar config.</button></div></div>
     <div class="grid grid-2" style="align-items:start">
       <div><div class="card card-pad"><h3 style="margin-bottom:14px">⚙️ Configuración del comprobante</h3>
-        <div class="field"><label>Tipo de comprobante</label><select class="select" id="tipo">${Object.entries(TIPO).map(([k,v])=>`<option value="${k}" ${CFG.tipo===k?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="field"><label>Tipo de comprobante</label>
+          <div class="input" style="background:var(--surface-3);color:var(--text-2);cursor:default">Comprobante interno «X» (no válido como factura)</div>
+          <p style="color:var(--text-2);font-size:11.5px;margin-top:4px;line-height:1.5">Mientras no se conecte la facturación electrónica (AFIP/ARCA), todos los comprobantes se emiten como documento interno «X». No se puede elegir A/B/C para no emitir algo que parezca una factura sin ser válida.</p></div>
         <div class="field"><label>Condición frente al IVA</label><select class="select" id="condicionIva">${COND.map(c=>`<option ${CFG.condicionIva===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="flex gap-12"><div class="field" style="flex:1"><label>Punto de venta</label><input class="input" id="puntoVenta" value="${esc(CFG.puntoVenta)}"></div>
           <div class="field" style="flex:1"><label>IVA (%)</label><input class="input" id="ivaPct" type="number" min="0" max="27" step="0.5" value="${CFG.ivaPct}"></div></div>
@@ -110,7 +118,6 @@ function render(view){
         ${SALES.length?SALES.map(s=>`<option value="${s.id}" ${selId===s.id?'selected':''}>#${s.number} · ${esc(s.clientName||'Consumidor Final')} · ${money(s.total)}</option>`).join(''):'<option value="">(sin ventas — datos de ejemplo)</option>'}</select></div>
         <div style="background:#e5e7eb;padding:16px;border-radius:8px;max-height:620px;overflow:auto"><div id="preview" style="background:#fff;box-shadow:var(--shadow-lg)"></div></div></div></div></div>`;
   const bind=(id,ev,fn)=>{const e=document.getElementById(id);if(e)e[ev]=fn;};
-  bind('tipo','onchange',e=>{CFG.tipo=e.target.value;preview();});
   bind('condicionIva','onchange',e=>{CFG.condicionIva=e.target.value;preview();});
   bind('puntoVenta','oninput',e=>{CFG.puntoVenta=e.target.value;preview();});
   bind('ivaPct','oninput',e=>{CFG.ivaPct=+e.target.value||0;preview();});
@@ -147,6 +154,6 @@ async function save(){
 function printInv(){
   const s=current();
   const w=window.open('','_blank','width=840,height=980'); if(!w) return warn('Habilitá las ventanas emergentes');
-  w.document.write(`<html><head><title>${CFG.tipo==='X'?'Comprobante':'Factura'} ${compNumber(s)}</title><style>@page{size:A4;margin:10mm}body{margin:0}</style></head><body>${invoiceHtml(s)}</body></html>`);
+  w.document.write(`<html><head><title>Comprobante ${compNumber(s)}</title><style>@page{size:A4;margin:10mm}body{margin:0}</style></head><body>${invoiceHtml(s)}</body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
 }

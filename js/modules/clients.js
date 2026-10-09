@@ -71,7 +71,7 @@ function openForm(c){
   save.onclick=async()=>{const data=validateForm(f,{name:[V.required],email:[V.email]}); if(!data) return warn('Revisá los campos');
     const payload={name:data.name,lastName:f.lastName.value.trim(),dni:f.dni.value.trim(),phone:f.phone.value.trim(),
       email:f.email.value.trim(),creditLimit:+f.creditLimit.value||0,city:f.city.value.trim(),province:f.province.value.trim(),
-      active:c?c.active!==false:true};
+      active:c?c.active!==false:true,updatedAt:Date.now()};
     try{
       // Unicidad: DNI/CUIT y email (email sin distinguir mayús/minús).
       await assertUnique('clients','dni',payload.dni,c?.id,'El DNI/CUIT');
@@ -109,7 +109,7 @@ function openPay(c){
     if(amount>(c.balance||0)+0.001) return warn('El pago no puede superar el saldo');
     const method=f.method.value;    const newBalance=+((c.balance||0)-amount).toFixed(2);
     try{
-      await DB.update('clients',c.id,{balance:newBalance});
+      await DB.update('clients',c.id,{balance:newBalance,updatedAt:Date.now()});
       await DB.add('accountsReceivable',{clientId:c.id,type:'credito',amount,balance:newBalance,
         concept:'Pago recibido ('+method+')',method,userId:USER.id,at:Date.now()});
       if(method==='efectivo'){ const open=(await DB.list('cashRegisters',{where:[['status','==','abierta']]}))[0];
