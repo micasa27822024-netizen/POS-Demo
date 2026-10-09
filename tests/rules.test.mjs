@@ -87,6 +87,30 @@ test('Rules · matriz de permisos (sección 7)', { skip: !rut ? 'emulador/libs a
     await assertSucceeds(setDoc(doc(asUser('admin1'), 'settings', 'business'), { name: 'POS' }));
     await assertFails(setDoc(doc(asUser('enc1'), 'settings', 'business'), { name: 'Hack' }));
   });
+
+  // Endurecimiento de montos: ningún importe de venta/pago/caja/CC puede ser negativo.
+  await t.test('ventas: rechaza importes negativos, acepta válidos', async () => {
+    const base = { userId: 'caj1', status: 'completada', subtotal: 100, itemDiscount: 0,
+      generalDiscount: 0, total: 100, cost: 60, profit: 40 };
+    await assertSucceeds(setDoc(doc(asUser('caj1'), 'sales', 'sOK'), base));
+    // profit negativo (venta bajo costo) SÍ se permite.
+    await assertSucceeds(setDoc(doc(asUser('caj1'), 'sales', 'sLoss'),
+      { ...base, cost: 150, profit: -50 }));
+    await assertFails(setDoc(doc(asUser('caj1'), 'sales', 'sNegTotal'), { ...base, total: -100 }));
+    await assertFails(setDoc(doc(asUser('caj1'), 'sales', 'sNegDisc'),
+      { ...base, generalDiscount: -10 }));
+  });
+
+  await t.test('pago/caja/CC: rechaza importe negativo', async () => {
+    await assertSucceeds(setDoc(doc(asUser('caj1'), 'payments', 'pOK'),
+      { saleId: 'sOK', method: 'efectivo', amount: 100 }));
+    await assertFails(setDoc(doc(asUser('caj1'), 'payments', 'pNeg'),
+      { saleId: 'sOK', method: 'efectivo', amount: -5 }));
+    await assertFails(setDoc(doc(asUser('caj1'), 'cashMovements', 'cmNeg'),
+      { type: 'ingreso', amount: -1, at: Date.now() }));
+    await assertFails(setDoc(doc(asUser('caj1'), 'accountsReceivable', 'arNeg'),
+      { clientId: 'c1', type: 'debito', amount: -1, at: Date.now() }));
+  });
 });
 
 // Nota de concurrencia (B3): la atomicidad de numeración/stock/caja se valida
