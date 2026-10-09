@@ -12,12 +12,14 @@ function applyFilters(arr,{where:w,orderBy:ob,limit:lim,startAfter:sa}={}){
         case 'in':return Array.isArray(v)&&v.includes(val);
         case 'array-contains':return Array.isArray(val)&&val.includes(v);default:return true;}});
   }
-  let obField=null,obDir='asc';
-  if(ob){const [f,dir='asc']=Array.isArray(ob)?ob:[ob]; obField=f; obDir=dir;
-    r=[...r].sort((a,b)=>{const av=a[f],bv=b[f];if(av<bv)return dir==='desc'?1:-1;if(av>bv)return dir==='desc'?-1:1;return 0;});}
+  let obKey=null,obDir='asc';
+  if(ob){const [f,dir='asc']=Array.isArray(ob)?ob:[ob];
+    // '__id__' ordena por el ID de documento (equivalente a documentId() en Firestore).
+    const key=f==='__id__'?'id':f; obKey=key; obDir=dir;
+    r=[...r].sort((a,b)=>{const av=a[key],bv=b[key];if(av<bv)return dir==='desc'?1:-1;if(av>bv)return dir==='desc'?-1:1;return 0;});}
   // Paginación demo (B1): startAfter es el valor del campo ordenado del último item.
-  if(sa!=null && obField){
-    const idx=r.findIndex(x=>x[obField]===sa);
+  if(sa!=null && obKey){
+    const idx=r.findIndex(x=>x[obKey]===sa);
     if(idx>=0) r=r.slice(idx+1);
   }
   if(lim) r=r.slice(0,lim);
@@ -34,7 +36,10 @@ export const DB = {
     const {collection,getDocs,query,where,orderBy,limit,startAfter}=fb;
     const cons=[];
     if(opts.where) for(const [f,op,v] of opts.where) cons.push(where(f,op,v));
-    if(opts.orderBy){const [f,dir='asc']=Array.isArray(opts.orderBy)?opts.orderBy:[opts.orderBy];cons.push(orderBy(f,dir));}
+    if(opts.orderBy){const [f,dir='asc']=Array.isArray(opts.orderBy)?opts.orderBy:[opts.orderBy];
+      // '__id__' -> documentId(): permite paginar una colección completa por su ID,
+      // sin excluir documentos que no tengan un campo de orden (p. ej. 'at').
+      cons.push(orderBy(f==='__id__'?fb.documentId():f,dir));}
     if(opts.startAfter) cons.push(startAfter(opts.startAfter));
     if(opts.limit) cons.push(limit(opts.limit));
     const q=cons.length?query(collection(db,name),...cons):collection(db,name);

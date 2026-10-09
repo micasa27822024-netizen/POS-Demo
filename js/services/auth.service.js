@@ -97,7 +97,17 @@ export const Auth = {
     const cred=await sec.authMod.createUserWithEmailAndPassword(sec.secAuth,email,password);
     const uid=cred.user.uid;
     // El perfil se escribe con la sesión del admin (instancia principal).
-    await sec.authMod.signOut(sec.secAuth).catch(()=>{});
-    return DB.set('users',uid,{name,email,role,active,uid,createdAt:Date.now(),lastLogin:null});
+    try{
+      const res=await DB.set('users',uid,{name,email,role,active,uid,createdAt:Date.now(),lastLogin:null});
+      await sec.authMod.signOut(sec.secAuth).catch(()=>{});
+      return res;
+    }catch(ex){
+      // Rollback: si no se pudo guardar el perfil, se elimina la credencial recién
+      // creada para no dejar una cuenta de Auth huérfana (que luego no podría ni
+      // iniciar sesión ni volver a crearse por email duplicado).
+      try{ await sec.authMod.deleteUser(cred.user); }
+      catch(_){ await sec.authMod.signOut(sec.secAuth).catch(()=>{}); }
+      throw new Error('No se pudo guardar el perfil del usuario; se canceló el alta. Reintentá.');
+    }
   }
 };

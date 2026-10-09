@@ -7,6 +7,7 @@ import { Audit } from './audit.service.js';
 import { calcTotals, DECIMAL_UNITS, isDecimalUnit } from './sales-calc.js';
 export { calcTotals, DECIMAL_UNITS, isDecimalUnit };
 import { calcReturn } from './sales-calc.js';
+import { dayKeyAR } from '../utils/format.js';
 // C1: interfaz de facturación electrónica (preparación sin backend).
 import { Fiscal, fiscalDefault } from './fiscal.service.js';
 export { Fiscal };
@@ -105,7 +106,7 @@ export const Sales={
         tx.add('accountsReceivable',{clientId,type:'debito',amount:ccAmount,balance:newBalance,
           concept:'Venta #'+number,saleId,userId:user.id,at:Date.now()}); }
       // B1: resumen diario incremental (dashboard/reportes leen esto, no la colección completa).
-      const dayKey=new Date().toISOString().slice(0,10);
+      const dayKey=dayKeyAR();
       const dsPatch={date:dayKey,salesCount:DB.increment(1),total:DB.increment(t.total),
         cost:DB.increment(t.cost),profit:DB.increment(t.profit)};
       for(const p of payments){ dsPatch['pm_'+p.method]=DB.increment(+p.amount||0); }
@@ -152,7 +153,7 @@ export const Sales={
     let openCash=null;
     if(method==='efectivo'){
       const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
-      openCash=regs.find(r=>r.openedBy===user.id)||regs[0]||null;
+      openCash=regs.find(r=>r.openedBy===user.id)||null;
     }
 
     return DB.transaction(async(tx)=>{
@@ -160,6 +161,14 @@ export const Sales={
       const s=await tx.get('sales',saleId);
       if(!s) throw new Error('La venta ya no existe');
       if(s.status==='anulada') throw new Error('La venta está anulada');
+      // C3: validación ATÓMICA. Lo ya devuelto se toma de la PROPIA venta
+      // (s.returnedQty) leída DENTRO de la transacción, no de una consulta previa a
+      // `returns` hecha afuera (eso permitía devoluciones duplicadas por concurrencia).
+      const returnedInTx={...(s.returnedQty||{})};
+      const calcTx=calcReturn(s,lines,returnedInTx);
+      const detail=calcTx.detail, refundTotal=calcTx.refundTotal, costTotal=calcTx.cost, profitTotal=calcTx.profit;
+      if(method==='cuenta_corriente' && !s.clientId)
+        throw new Error('La venta no tiene cliente: no se puede acreditar en cuenta corriente');
       const prod={}; for(const d of detail){ prod[d.productId]=await tx.get('products',d.productId); }
       const cli=(method==='cuenta_corriente'&&s.clientId)?await tx.get('clients',s.clientId):null;
       // ESCRITURAS
@@ -189,9 +198,11 @@ export const Sales={
       const fullyReturned=(s.items||[]).every(it=>(+retMap[it.productId]||0)+0.0001>=(+it.qty||0));
       tx.update('sales',saleId,{returnedQty:retMap,
         returnedTotal:+(((+s.returnedTotal)||0)+refundTotal).toFixed(2),
+        returnedProfit:+(((+s.returnedProfit)||0)+profitTotal).toFixed(2),
+        returnedCost:+(((+s.returnedCost)||0)+costTotal).toFixed(2),
         status:fullyReturned?'devuelta':'parcial_devuelta',updatedAt:Date.now()});
       // dailyStats de HOY: suma devoluciones y resta de los netos del día.
-      const dayKey=new Date().toISOString().slice(0,10);
+      const dayKey=dayKeyAR();
       const dsPatch={date:dayKey,returnsCount:DB.increment(1),returnsTotal:DB.increment(refundTotal),
         total:DB.increment(-refundTotal),cost:DB.increment(-costTotal),profit:DB.increment(-profitTotal)};
       dsPatch['pm_'+method]=DB.increment(-refundTotal);
@@ -211,10 +222,36 @@ export const Sales={
     const sale=await DB.get('sales',saleId);
     if(!sale) throw new Error('La venta no existe');
     if(sale.status==='anulada') throw new Error('La venta está anulada: no se emite comprobante fiscal');
+    const f0=sale.fiscal||{};
+    // C1 idempotencia: si ya tiene CAE emitido, se devuelve sin volver a solicitar.
+    if(f0.cae && f0.estado!=='no_fiscal' && f0.estado!=='error') return f0;
+    // Candado ATÓMICO: marca 'solicitando' solo si no hay otra solicitud en curso
+    // (evita pedir dos CAE para la misma venta por doble clic o concurrencia).
+    await DB.transaction(async(tx)=>{
+      const s=await tx.get('sales',saleId);
+      if(!s) throw new Error('La venta ya no existe');
+      if(s.status==='anulada') throw new Error('La venta está anulada');
+      const f=s.fiscal||{};
+      if(f.cae && f.estado!=='no_fiscal' && f.estado!=='error') return; // ya emitido
+      if(f.estado==='solicitando') throw new Error('Ya hay una solicitud de CAE en curso para esta venta');
+      tx.update('sales',saleId,{fiscal:{...f,estado:'solicitando'},updatedAt:Date.now()});
+    });
+    // Relee por si otra solicitud concurrente ya completó el CAE.
+    const cur=await DB.get('sales',saleId);
+    const fc=(cur&&cur.fiscal)||{};
+    if(fc.cae && fc.estado!=='no_fiscal' && fc.estado!=='error' && fc.estado!=='solicitando') return fc;
     const invCfg=await DB.get('settings','invoice').catch(()=>null);
     const cfg={puntoVenta:(invCfg&&invCfg.puntoVenta)||'0001',
       tipoComprobante:(invCfg&&invCfg.tipo)||'X'};
-    const fiscal=await Fiscal.requestCAE(sale,cfg);
+    let fiscal;
+    try{
+      fiscal=await Fiscal.requestCAE(sale,cfg);
+    }catch(ex){
+      // Si falla la red/backend, se libera el candado dejando estado 'error'.
+      await DB.update('sales',saleId,{fiscal:{...f0,estado:'error',error:(ex&&ex.message)||'Error de facturación'},updatedAt:Date.now()});
+      throw ex;
+    }
+    // Guarda el resultado (emitido, no_fiscal o error): en todos los casos libera el candado.
     await DB.update('sales',saleId,{fiscal,updatedAt:Date.now()});
     Audit.log('sale.fiscal','sale',{id:saleId,number:sale.number,estado:fiscal.estado,cae:fiscal.cae||''});
     return fiscal;
