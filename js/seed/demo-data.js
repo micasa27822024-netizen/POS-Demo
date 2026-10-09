@@ -2,6 +2,8 @@
 import { DB } from '../services/db.service.js';
 import { DEMO_MODE } from '../services/firebase.js';
 import { demoStore } from '../services/demo-store.js';
+import { dayKeyAR } from '../utils/format.js';
+import { needsRestock } from '../services/stock-flags.js';
 
 const now=Date.now(); const day=864e5;
 
@@ -63,9 +65,33 @@ function genSales(){
   return sales;
 }
 
+// B1: resumen diario pre-agregado (el Dashboard lee ESTO, no la colección de ventas).
+// Reproduce lo que cada venta escribe en vivo: totales, medios de pago (pm_),
+// unidades por producto (tp_) e importe por categoría (tc_).
+function genDailyStats(sales){
+  const map={};
+  for(const s of sales){
+    const key=dayKeyAR(s.at);
+    const d=map[key]||(map[key]={id:key,date:key,salesCount:0,total:0,cost:0,profit:0,demo:true});
+    d.salesCount+=1; d.total+=s.total; d.cost+=s.cost; d.profit+=s.profit;
+    for(const p of (s.payments||[])){ const k='pm_'+p.method; d[k]=(d[k]||0)+(+p.amount||0); }
+    for(const it of (s.items||[])){
+      const tp='tp_'+it.productId; d[tp]=(d[tp]||0)+(+it.qty||0);
+      const prod=DEMO.products.find(x=>x.id===it.productId);
+      const cid=(prod&&prod.categoryId)||'none';
+      const tc='tc_'+cid; d[tc]=(d[tc]||0)+(+it.total||0);
+    }
+  }
+  return Object.values(map).map(d=>({...d,total:+d.total.toFixed(2),cost:+d.cost.toFixed(2),profit:+d.profit.toFixed(2)}));
+}
+
 export async function loadDemoData(){
+  const sales=genSales();
+  // B1: la bandera needsRestock se precalcula para que las alertas de stock del
+  // Dashboard (que consulta where needsRestock==true) funcionen también en demo.
+  const products=DEMO.products.map(p=>({...p,needsRestock:needsRestock(p)}));
   const data={users:DEMO.users,categories:DEMO.categories,subcategories:DEMO.subcategories,
-    suppliers:DEMO.suppliers,clients:DEMO.clients,products:DEMO.products,sales:genSales(),
+    suppliers:DEMO.suppliers,clients:DEMO.clients,products,sales,dailyStats:genDailyStats(sales),
     settings:[{id:'business',name:'Mi Comercio POS',legalName:'Mi Comercio SRL',cuit:'30-11112222-3',
       address:'Calle Principal 100',phone:'3794-000000',email:'contacto@micomercio.com',
       currency:'ARS',iva:21,demo:true}]};
