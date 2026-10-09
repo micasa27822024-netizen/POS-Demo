@@ -45,16 +45,27 @@ service cloud.firestore {
     match /subcategories/{id} { allow read: if anyRole(); allow write: if isStaff(); }
 
     // --- Ventas: crea cualquier rol operativo (venta propia y completada) ---
+    // Endurecimiento de montos: ningún importe de la venta puede ser negativo.
+    // (La ganancia SÍ puede ser negativa: se vende por debajo del costo, así que
+    //  'profit' queda a propósito fuera de esta validación.)
     match /sales/{id} {
       allow read: if anyRole();
       allow create: if anyRole()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'completada';
+        && request.resource.data.status == 'completada'
+        && request.resource.data.total is number           && request.resource.data.total >= 0
+        && request.resource.data.subtotal is number        && request.resource.data.subtotal >= 0
+        && request.resource.data.cost is number            && request.resource.data.cost >= 0
+        && request.resource.data.itemDiscount is number    && request.resource.data.itemDiscount >= 0
+        && request.resource.data.generalDiscount is number && request.resource.data.generalDiscount >= 0;
       allow update: if isStaff();   // anulación / corrección
       allow delete: if isAdmin();
     }
     match /payments/{id} {
-      allow read: if anyRole(); allow create: if anyRole();
+      allow read: if anyRole();
+      // Un pago nunca puede ser por un importe negativo.
+      allow create: if anyRole()
+        && request.resource.data.amount is number && request.resource.data.amount >= 0;
       allow update, delete: if isStaff();
     }
 
@@ -81,13 +92,27 @@ service cloud.firestore {
         || (anyRole() && changedKeys().hasOnly(['balance','updatedAt']));
       allow delete: if isStaff();
     }
-    match /accountsReceivable/{id} { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
+    // Cuenta corriente: el importe del movimiento (débito/crédito) no puede ser negativo.
+    match /accountsReceivable/{id} {
+      allow read: if anyRole();
+      allow create: if anyRole()
+        && request.resource.data.amount is number && request.resource.data.amount >= 0;
+      allow update: if anyRole();
+      allow delete: if isAdmin();
+    }
     match /accountsPayable/{id}    { allow read: if anyRole(); allow write: if isStaff(); }
 
     // --- Stock y caja ---
     match /stockMovements/{id} { allow read: if anyRole(); allow create: if anyRole(); allow update, delete: if isAdmin(); }
     match /cashRegisters/{id}  { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
-    match /cashMovements/{id}  { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
+    // Movimientos de caja: el importe nunca puede ser negativo (el signo lo da el 'type').
+    match /cashMovements/{id}  {
+      allow read: if anyRole();
+      allow create: if anyRole()
+        && request.resource.data.amount is number && request.resource.data.amount >= 0;
+      allow update: if anyRole();
+      allow delete: if isAdmin();
+    }
     match /expenses/{id}       { allow read: if anyRole(); allow write: if isStaff(); }
 
     // --- Numeradores y resúmenes diarios (A3 / B1) ---
