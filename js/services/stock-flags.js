@@ -15,3 +15,22 @@ export function needsRestock(p) {
   const min = +p.stockMin || 0;
   return stock <= min;
 }
+
+// Punto C (recálculo de reposición): la bandera `needsRestock` solo se recalcula
+// cuando el producto se MODIFICA. Los productos que ya estaban bajo el mínimo y
+// no se mueven nunca la tuvieron, así que no aparecían en las alertas del
+// Dashboard. Esta función PURA compara, para una lista de productos, la bandera
+// GUARDADA contra la que CORRESPONDE, y devuelve solo los que hay que corregir:
+//   [{ id, needsRestock }]  (ya listos para escribir en Firestore).
+// Devolver solo las diferencias evita reescribir toda la colección (menos
+// escrituras y menos ruido en la caché del POS).
+export function diffRestock(products) {
+  const out = [];
+  for (const p of (products || [])) {
+    if (!p || p.id == null) continue;
+    const should = needsRestock(p);
+    const stored = p.needsRestock === true;
+    if (should !== stored) out.push({ id: p.id, needsRestock: should });
+  }
+  return out;
+}

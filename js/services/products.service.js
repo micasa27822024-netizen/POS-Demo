@@ -3,7 +3,7 @@ import { DB } from './db.service.js';
 import { Audit } from './audit.service.js';
 import { assertUnique, isUnique } from '../utils/unique.js';
 // B1: bandera de reposición (el Dashboard consulta solo lo que falta reponer).
-import { needsRestock } from './stock-flags.js';
+import { needsRestock, diffRestock } from './stock-flags.js';
 // B3: el cálculo de margen vive en un módulo PURO testeable con node --test.
 import { margin } from './product-calc.js';
 export { margin };
@@ -41,6 +41,20 @@ export const Products={
     if(active){ const p=await DB.get('products',id); if(p) extra={needsRestock:needsRestock({...p,active:true})}; }
     await DB.update('products',id,{active,...extra,updatedAt:Date.now()});
     await Audit.log(active?'activate':'deactivate','product',{id});
+  },
+  // Punto C: recálculo ÚNICO de la bandera de reposición para TODO el catálogo.
+  // Pensado para un botón de admin: recorre todos los productos y corrige la
+  // bandera `needsRestock` de los que quedó desactualizada (p. ej. productos que
+  // ya estaban bajo el mínimo pero nunca se movieron). Solo escribe los que
+  // cambian. Devuelve cuántos corrigió.
+  async recalcRestockFlags(){
+    const products=await DB.list('products');
+    const changes=diffRestock(products);
+    for(const c of changes){
+      await DB.update('products',c.id,{needsRestock:c.needsRestock,updatedAt:Date.now()});
+    }
+    if(changes.length) await Audit.log('recalc','product',{field:'needsRestock',count:changes.length});
+    return changes.length;
   },
   async duplicate(id){
     const p=await DB.get('products',id); if(!p) return;
