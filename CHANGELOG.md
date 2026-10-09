@@ -2,6 +2,43 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.1] — C1 (preparación fiscal) + corrección de Productos
+
+### C1 — Facturación electrónica AFIP/ARCA (preparación sin backend)
+
+Se deja lista la **interfaz fiscal** para que, cuando se decida el backend, la
+facturación electrónica se conecte **sin rehacer** pantallas. La integración
+real (certificado digital, punto de venta por webservice, credenciales del lado
+servidor) queda **fuera de alcance** hasta decidir backend (sección 8).
+
+- Nuevo `js/services/fiscal.service.js`:
+  - `Fiscal.requestCAE(sale, cfg)`: contrato único que **nunca lanza** y siempre
+    devuelve un objeto fiscal válido; ante error del backend devuelve
+    `estado:'error'` sin perder la venta ya registrada.
+  - **Proveedor conectable** (`Fiscal.setProvider`): por defecto es **nulo**
+    (comprobante interno **X**, sin CAE). Un backend real lo reemplaza sin tocar
+    el frontend. `Fiscal.isEnabled()` indica si hay integración conectada.
+  - `fiscalDefault()`, `tipoPorCondicion()` (condición de IVA → tipo A/B/C/X) y
+    `CODIGO_AFIP`.
+- Cada venta guarda ahora un campo **`fiscal`** `{ tipoComprobante, puntoVenta,
+  numero, cae, caeVto, estado, error }`. La **numeración fiscal** (`numero`) es
+  **separada** de la numeración interna de la venta (`number`): arranca en 0
+  (“sin asignar”) y la completa el backend al aprobar el CAE.
+- Nuevo `Sales.requestFiscal(saleId)`: pide el CAE por la interfaz y guarda el
+  resultado en `sale.fiscal` (fuera de transacción; la venta ya es atómica por A3).
+- **Facturas**: la plantilla A4 ahora muestra el CAE/vencimiento reales cuando
+  existen, usa la numeración fiscal si está asignada, informa el estado de la
+  integración y suma el botón **“Solicitar CAE”** para la venta seleccionada.
+- Pruebas: nuevo `tests/fiscal.test.mjs` (proveedor nulo, backend real,
+  manejo de errores, mapeos). `node --test` sigue en verde.
+
+### Corrección — Productos quedaba en pantalla en blanco
+
+- `js/utils/csv.js` no exportaba `exportCSV` ni `parseCSV`, que `products.js`
+  importaba → el módulo no cargaba y la pantalla quedaba vacía. Se agregaron
+  ambas funciones (export/import CSV con comillas, CRLF y BOM). Verificado con
+  un ida y vuelta de datos (comas, comillas y acentos).
+
 ## [1.1.0] — Auditoría técnica aplicada (Fases C + “Otros”)
 
 Completa los puntos pendientes del informe de auditoría sobre la base ya
