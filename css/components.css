@@ -8,6 +8,7 @@
 .btn-primary:hover{background:var(--primary-600)}
 .btn-success{background:var(--success);color:#fff}
 .btn-danger{background:var(--danger);color:#fff}
+.btn-warning{background:var(--warn);color:#fff}
 .btn-ghost{background:transparent;border:1px solid var(--border-strong)}
 .btn-sm{padding:6px 11px;font-size:13px}
 .btn-icon{padding:9px;width:38px;height:38px;border-radius:10px}
