@@ -67,10 +67,13 @@ export function parseCSV(text) {
 }
 
 // Colecciones incluidas en el respaldo completo del sistema.
+// Nota: los GASTOS (egresos de caja) viajan dentro de 'cashMovements' y las
+// PLANTILLAS de factura/ticket dentro de 'settings' (docs 'invoice'/'ticket'),
+// por eso no figuran como colecciones aparte.
 export const BACKUP_COLLECTIONS = [
   'settings', 'categories', 'subcategories', 'products', 'clients', 'suppliers',
   'users', 'sales', 'payments', 'purchases', 'returns', 'stockMovements',
-  'cashRegisters', 'cashMovements', 'accountsReceivable',
+  'cashRegisters', 'cashMovements', 'accountsReceivable', 'accountsPayable',
   'counters', 'dailyStats', 'auditLogs'
 ];
 
