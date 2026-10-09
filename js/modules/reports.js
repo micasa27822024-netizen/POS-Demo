@@ -3,7 +3,7 @@ import { requireAuth } from './guard.js';
 import { renderShell } from '../components/shell.js';
 import { DB } from '../services/db.service.js';
 import { ok, err } from '../utils/toast.js';
-import { money, num, pct, fdate, dayStart, dayEnd, monthStart } from '../utils/format.js';
+import { money, num, pct, fdate, dayStart, dayEnd, monthStart, dayKeyAR } from '../utils/format.js';
 import { esc as escapeHtml } from '../utils/escape.js';
 
 let USER, SALES=[], PURCH=[], REGS=[], from='', to='', preset='30';
@@ -23,7 +23,7 @@ async function reload(){
     DB.list('cashRegisters',{where:[['status','==','cerrada']]})
   ]);
 }
-const iso=ts=>new Date(ts).toISOString().slice(0,10);
+const iso=ts=>dayKeyAR(ts);
 function applyPreset(p){
   preset=p; const now=Date.now();
   if(p==='today'){ from=iso(dayStart()); to=iso(dayEnd()); }
@@ -62,8 +62,10 @@ function barChart(data,fmt){
 
 function compute(){
   const sales=SALES.filter(v=>inRange(v.at)&&v.status!=='anulada');
-  const fact=sales.reduce((s,v)=>s+(+v.total||0),0);
-  const prof=sales.reduce((s,v)=>s+(+v.profit||0),0);
+  // Netos de devoluciones: a cada venta se le resta lo efectivamente devuelto
+  // (returnedTotal) y la ganancia devuelta (returnedProfit).
+  const fact=sales.reduce((s,v)=>s+((+v.total||0)-(+v.returnedTotal||0)),0);
+  const prof=sales.reduce((s,v)=>s+((+v.profit||0)-(+v.returnedProfit||0)),0);
   const tickets=sales.length;
   const items=sales.reduce((s,v)=>s+(v.items||[]).reduce((a,it)=>a+(+it.qty||0),0),0);
   // Medios de pago
@@ -78,11 +80,11 @@ function compute(){
   const topRev=Object.values(prodMap).sort((a,b)=>b.rev-a.rev).slice(0,8);
   // Por vendedor
   const sellMap={};
-  sales.forEach(v=>{const k=v.userName||'—';sellMap[k]=(sellMap[k]||0)+(+v.total||0);});
+  sales.forEach(v=>{const k=v.userName||'—';sellMap[k]=(sellMap[k]||0)+((+v.total||0)-(+v.returnedTotal||0));});
   const sellers=Object.entries(sellMap).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
   // Por día
   const dayMap={};
-  sales.forEach(v=>{const d=iso(v.at);dayMap[d]=(dayMap[d]||0)+(+v.total||0);});
+  sales.forEach(v=>{const d=iso(v.at);dayMap[d]=(dayMap[d]||0)+((+v.total||0)-(+v.returnedTotal||0));});
   const [f,t]=range(); const days=[];
   if(isFinite(f)&&isFinite(t)){
     for(let d=new Date(from+'T00:00:00').getTime(); d<=t && days.length<60; d+=DAY){

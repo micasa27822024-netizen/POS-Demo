@@ -1,7 +1,7 @@
 import { requireAuth } from './guard.js';
 import { renderShell } from '../components/shell.js';
 import { DB } from '../services/db.service.js';
-import { money, num, fdatetime, dayStart, monthStart } from '../utils/format.js';
+import { money, num, fdatetime, dayStart, monthStart, dayKeyAR } from '../utils/format.js';
 import { currentTheme } from '../utils/theme.js';
 import { esc } from '../utils/escape.js';
 
@@ -15,17 +15,17 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   // B1: lecturas acotadas. Los agregados diarios salen de `dailyStats`
   // (ya netos de anulaciones). El detalle de ítems se consulta solo para los
   // últimos 30 días; los deudores por filtro de saldo; stock por productos.
-  const iso=d=>new Date(d).toISOString().slice(0,10);
+  const iso=d=>dayKeyAR(d);
   const now=Date.now();
   const cutoff30=now-30*864e5;
   const cutoffStr=iso(cutoff30);
   const [dstats,recentDetail,products,debtors,suppliers,categories]=await Promise.all([
     DB.list('dailyStats',{where:[['date','>=',cutoffStr]],orderBy:['date','asc']}),
-    DB.list('sales',{where:[['at','>=',cutoff30]],orderBy:['at','desc']}),
-    DB.list('products'),
-    DB.list('clients',{where:[['balance','>',0]]}),
+    DB.list('sales',{where:[['at','>=',cutoff30]],orderBy:['at','desc'],limit:3000}),
+    DB.list('products',{limit:2000}),
+    DB.list('clients',{where:[['balance','>',0]],limit:500}),
     DB.list('suppliers',{limit:6}),
-    DB.list('categories')
+    DB.list('categories',{limit:300})
   ]);
 
   const todayStr=iso(now);

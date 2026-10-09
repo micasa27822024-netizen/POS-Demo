@@ -8,7 +8,7 @@ import { openModal, confirmDialog } from '../utils/modal.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
-import { money, num, fdatetime, fdate } from '../utils/format.js';
+import { money, num, fdatetime, fdate, dayKeyAR } from '../utils/format.js';
 import { esc } from '../utils/escape.js';
 
 let USER, LIST=[], q='', from='', to='';
@@ -17,7 +17,7 @@ const PAGE=50; let cursorAt=null, noMore=false, loading=false;
 function defaultRange(){
   const now=new Date();
   const d7=new Date(now.getTime()-7*24*3600*1000);
-  const iso=d=>d.toISOString().slice(0,10);
+  const iso=d=>dayKeyAR(d);
   return {from:iso(d7),to:iso(now)};
 }
 function rangeTs(){
@@ -107,7 +107,7 @@ function detail(v){
       ${v.change?`<span class="chip">Vuelto: ${money(v.change)}</span>`:''}</div></div>`;
   const footer=[];
   const close=document.createElement('button'); close.className='btn btn-ghost'; close.textContent='Cerrar'; footer.push(close);
-  if(v.status!=='anulada' && can(USER.role,'sale.void')){
+  if(v.status==='completada' && can(USER.role,'sale.void')){
     const voidBtn=document.createElement('button'); voidBtn.className='btn btn-danger'; voidBtn.textContent='Anular venta';
     voidBtn.onclick=()=>{ m.close(); doVoid(v); }; footer.push(voidBtn);
   }
@@ -139,12 +139,15 @@ async function revertSale(v,reason){
   // Caja abierta (consulta fuera de la transacción).
   let openCash=null;
   if(cash>0){ const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
-    openCash=regs.find(r=>r.openedBy===USER.id)||regs[0]||null; }
+    openCash=regs.find(r=>r.openedBy===USER.id)||null; }
   await DB.transaction(async(tx)=>{
     // LECTURAS
     const sale=await tx.get('sales',v.id);
     if(!sale) throw new Error('La venta ya no existe');
     if(sale.status==='anulada') throw new Error('La venta ya fue anulada');
+    // A4: solo se anula una venta COMPLETADA. Si tiene devoluciones (devuelta /
+    // parcial_devuelta) anularla repondría stock YA repuesto -> duplicación.
+    if(sale.status!=='completada') throw new Error('No se puede anular una venta con devoluciones. Gestioná la devolución desde «Devolver ítems».');
     const prod={}; for(const it of (sale.items||[])){ prod[it.productId]=await tx.get('products',it.productId); }
     const cli=(cc>0&&sale.clientId)?await tx.get('clients',sale.clientId):null;
     // ESCRITURAS
@@ -162,7 +165,7 @@ async function revertSale(v,reason){
       tx.add('accountsReceivable',{clientId:sale.clientId,type:'credito',amount:cc,balance:nb,
         concept:'Anulación venta #'+v.number,saleId:v.id,userId:USER.id,at:Date.now()}); }
     // B1: revertir el resumen diario del día de la venta y registrar la anulación.
-    const dayKey=new Date(sale.at).toISOString().slice(0,10);
+    const dayKey=dayKeyAR(sale.at);
     const dsPatch={date:dayKey,salesCount:DB.increment(-1),total:DB.increment(-(sale.total||0)),
       cost:DB.increment(-(sale.cost||0)),profit:DB.increment(-(sale.profit||0)),
       voidedCount:DB.increment(1),voidedTotal:DB.increment(sale.total||0)};

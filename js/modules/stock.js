@@ -17,7 +17,8 @@ let USER, PRODS=[], MOVS=[], tab='stock', q='';
   await reload(); render(view);
 })();
 async function reload(){
-  [PRODS,MOVS]=await Promise.all([DB.list('products',{orderBy:['name','asc']}),DB.list('stockMovements')]);
+  // B1: historial acotado a los últimos 500 movimientos (orden desc por fecha).
+  [PRODS,MOVS]=await Promise.all([DB.list('products',{orderBy:['name','asc']}),DB.list('stockMovements',{orderBy:['at','desc'],limit:500})]);
   MOVS=MOVS.sort((a,b)=>b.at-a.at);
 }
 const low=p=>(p.stock||0)<=(p.stockMin||0);
@@ -51,7 +52,7 @@ function paint(){
   if(tab==='alerts') list=list.filter(low);
   host.innerHTML=`<div class="card"><table class="table"><thead><tr><th>Producto</th><th>Código</th><th class="ta-right">Stock</th><th class="ta-right">Mín.</th><th>Estado</th><th></th></tr></thead>
     <tbody>${list.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.code||'—')}</td>
-      <td class="ta-right"><b>${num(p.stock||0)}</b> ${p.unit||''}</td><td class="ta-right">${num(p.stockMin||0)}</td>
+      <td class="ta-right"><b>${num(p.stock||0)}</b> ${esc(p.unit||'')}</td><td class="ta-right">${num(p.stockMin||0)}</td>
       <td>${low(p)?'<span class="badge badge-danger">Bajo mínimo</span>':'<span class="badge badge-success">OK</span>'}</td>
       <td class="ta-right">${can(USER.role,'stock.adjust')?`<button class="btn btn-sm btn-ghost" data-adj="${p.id}">⚙️ Ajustar</button>`:''}</td></tr>`).join('')||`<tr><td colspan="6" class="empty">${tab==='alerts'?'No hay productos bajo el mínimo 🎉':'Sin productos'}</td></tr>`}</tbody></table></div>`;
   host.querySelectorAll('[data-adj]').forEach(b=>b.onclick=()=>openAdjust(PRODS.find(p=>p.id===b.dataset.adj)));

@@ -92,11 +92,12 @@ async function confirmPurchase({supplierId,invoice,paid,method}){
   const total=+items.reduce((s,i)=>s+i.subtotal,0).toFixed(2);
   const paidReal=Math.min(paid,total);
   const debt=+(total-paidReal).toFixed(2);
-  // Caja abierta (consulta fuera de la transacción).
+  // Caja abierta DEL usuario (consulta fuera de la transacción). Si no tiene caja
+  // propia, el egreso se registra marcado "sin caja" (sinCaja), nunca en la caja de otro.
   let openCash=null;
   if(method!=='cuenta_corriente' && paidReal>0){
     const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
-    openCash=regs.find(r=>r.openedBy===USER.id)||regs[0]||null;
+    openCash=regs.find(r=>r.openedBy===USER.id)||null;
   }
   const purchase=await DB.transaction(async(tx)=>{
     // LECTURAS
@@ -115,7 +116,7 @@ async function confirmPurchase({supplierId,invoice,paid,method}){
       tx.add('stockMovements',{productId:it.productId,productName:(p&&p.name)||it.name,type:'compra',qty:it.qty,delta:it.qty,
         stockAfter:newStock,reason:'Compra #'+number,userId:USER.id,userName:USER.name,refId:purchaseId,at:Date.now()});
     }
-    if(openCash) tx.add('cashMovements',{registerId:openCash.id,type:'egreso',amount:paidReal,
+    if(method!=='cuenta_corriente' && paidReal>0) tx.add('cashMovements',{registerId:openCash?openCash.id:null,sinCaja:!openCash,type:'egreso',amount:paidReal,
       concept:'Compra #'+number+' '+(sup?.tradeName||''),userId:USER.id,at:Date.now()});
     if(debt>0) tx.add('accountsPayable',{supplierId,type:'debito',amount:debt,concept:'Compra #'+number,
       purchaseId,userId:USER.id,at:Date.now()});

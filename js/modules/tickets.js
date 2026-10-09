@@ -46,7 +46,7 @@ function ticketHtml(s){
     <div>Comprobante interno N° ${s.number}<br>${new Date(s.at).toLocaleString('es-AR')}<br>
       Cliente: ${esc(s.clientName)}<br>Vendedor: ${esc(s.userName)}</div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
-    ${s.items.map(it=>`<div style="display:flex;justify-content:space-between"><span>${it.qty} ${it.unit} x ${esc(it.name)}</span></div>
+    ${s.items.map(it=>`<div style="display:flex;justify-content:space-between"><span>${it.qty} ${esc(it.unit||'')} x ${esc(it.name)}</span></div>
       <div style="display:flex;justify-content:space-between"><span>&nbsp;&nbsp;@ ${money(it.price)}</span><b>${money(it.price*it.qty-(it.discount||0))}</b></div>`).join('')}
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
     <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(s.subtotal)}</span></div>

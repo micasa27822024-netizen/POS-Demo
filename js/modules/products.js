@@ -200,7 +200,10 @@ function doImport(){
       <p class="text-muted mt-8" style="font-size:12px">${parsed.length} registro(s) a importar</p>`;
     confirm.disabled=!parsed.length;};
   confirm.onclick=async()=>{let n=0;for(const r of parsed){if(!r.name)continue;
-    await Products.create({name:r.name,code:r.code||'',barcode:r.barcode||'',unit:r.unit||'unidad',
+    // Punto 3: la unidad importada se valida contra la lista permitida (UNITS);
+    // si no es válida, se usa 'unidad' por defecto (evita datos basura en facturas/tickets).
+    const unit=UNITS.some(u=>u.v===r.unit)?r.unit:'unidad';
+    await Products.create({name:r.name,code:r.code||'',barcode:r.barcode||'',unit,
       cost:+r.cost||0,price:+r.price||0,iva:21,stock:+r.stock||0,stockMin:0,stockMax:0,active:true});n++;}
     await reload(); m.close(); ok(n+' productos importados'); paint();};
 }

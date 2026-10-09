@@ -13,7 +13,7 @@ let USER, LOGS=[], q='', from='', to='', act='';
   const view=renderShell('audit','Auditoría'); view.innerHTML='<div class="loader">Cargando…</div>';
   await reload(); render(view);
 })();
-async function reload(){ LOGS=(await DB.list('auditLogs')).sort((a,b)=>b.at-a.at); }
+async function reload(){ LOGS=await DB.list('auditLogs',{orderBy:['at','desc'],limit:1000}); }
 
 const ACT={
   login:'Inicio de sesión',logout:'Cierre de sesión',

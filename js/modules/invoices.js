@@ -49,7 +49,7 @@ function invoiceHtml(s){
   const iva=+(s.total-neto).toFixed(2);
   const rows=(s.items||[]).map(it=>{ const sub=it.price*it.qty-(it.discount||0);
     const td='padding:7px;border:1px solid #eee';
-    return `<tr><td style="${td}">${num(it.qty)} ${it.unit||''}</td><td style="${td}">${esc(it.name)}</td><td style="${td};text-align:right">${money(it.price)}</td><td style="${td};text-align:right">${money(sub)}</td></tr>`; }).join('');
+    return `<tr><td style="${td}">${num(it.qty)} ${esc(it.unit||'')}</td><td style="${td}">${esc(it.name)}</td><td style="${td};text-align:right">${money(it.price)}</td><td style="${td};text-align:right">${money(sub)}</td></tr>`; }).join('');
   return `<div style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111;padding:26px;font-size:12.5px;width:100%;box-sizing:border-box">
     <div style="display:flex;justify-content:space-between;border:1px solid #333;border-radius:4px">
       <div style="flex:1;padding:14px"><b style="font-size:17px">${esc(BIZ.name||'Comercio')}</b><br>
