@@ -31,13 +31,14 @@ service cloud.firestore {
     }
 
     // --- Catálogo: lectura para todo el personal; escritura staff ---
-    // El cajero solo puede DESCONTAR stock (venta): stock + updatedAt y nunca aumentarlo.
+    // El cajero solo puede DESCONTAR stock (venta): stock + updatedAt (+ la
+    // bandera de reposición needsRestock, que la venta recalcula) y nunca aumentarlo.
     match /products/{id} {
       allow read: if anyRole();
       allow create, delete: if isStaff();
       allow update: if isStaff()
         || (anyRole()
-            && changedKeys().hasOnly(['stock','updatedAt'])
+            && changedKeys().hasOnly(['stock','updatedAt','needsRestock'])
             && request.resource.data.stock <= resource.data.stock);
     }
     match /categories/{id}    { allow read: if anyRole(); allow write: if isStaff(); }
