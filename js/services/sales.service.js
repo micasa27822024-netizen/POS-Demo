@@ -6,6 +6,7 @@ import { Audit } from './audit.service.js';
 // B3: la lógica de cálculo vive en un módulo PURO testeable con node --test.
 import { calcTotals, DECIMAL_UNITS, isDecimalUnit } from './sales-calc.js';
 export { calcTotals, DECIMAL_UNITS, isDecimalUnit };
+import { calcReturn } from './sales-calc.js';
 
 export const PAYMENT_METHODS=[
   {v:'efectivo',l:'Efectivo',ic:'💵'},
@@ -131,31 +132,9 @@ export const Sales={
     for(const r of prevReturns){ for(const l of (r.lines||[])){
       returnedSoFar[l.productId]=(returnedSoFar[l.productId]||0)+(+l.qty||0); } }
 
-    // Validación contra lo vendido y armado de líneas con importes.
-    const afterItem=(+sale.subtotal||0)-(+sale.itemDiscount||0); // base para prorratear descuento general
-    const gDisc=+sale.generalDiscount||0;
-    const detail=[];
-    let refundTotal=0, costTotal=0;
-    for(const req of lines){
-      const q=+req.qty||0; if(q<=0) continue;
-      const it=(sale.items||[]).find(x=>x.productId===req.productId);
-      if(!it) throw new Error('Un ítem no pertenece a la venta');
-      const sold=+it.qty||0;
-      const already=returnedSoFar[req.productId]||0;
-      const avail=+(sold-already).toFixed(3);
-      if(q>avail+0.0001) throw new Error('No podés devolver '+q+' de «'+it.name+'»: disponible '+avail);
-      const grossLine=(+it.price||0)*q;
-      const itemDiscLine=sold>0?(+it.discount||0)*(q/sold):0;
-      const netBeforeGeneral=grossLine-itemDiscLine;
-      const generalShare=afterItem>0?gDisc*(netBeforeGeneral/afterItem):0;
-      const refundLine=+(netBeforeGeneral-generalShare).toFixed(2);
-      const costLine=+((+it.cost||0)*q).toFixed(2);
-      refundTotal+=refundLine; costTotal+=costLine;
-      detail.push({productId:req.productId,name:it.name,unit:it.unit||'',qty:q,refund:refundLine,cost:costLine});
-    }
-    if(!detail.length) throw new Error('No hay cantidades válidas para devolver');
-    refundTotal=+refundTotal.toFixed(2); costTotal=+costTotal.toFixed(2);
-    const profitTotal=+(refundTotal-costTotal).toFixed(2);
+    // Validación contra lo vendido y cálculo de importes (lógica PURA, testeable).
+    const { detail, refundTotal, cost: costTotal, profit: profitTotal } =
+      calcReturn(sale, lines, returnedSoFar);
 
     if(method==='cuenta_corriente' && !sale.clientId)
       throw new Error('La venta no tiene cliente: no se puede acreditar en cuenta corriente');
