@@ -2,6 +2,32 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.4] — Optimización de lecturas en Dashboard y POS
+
+Menos consumo de Firestore al abrir el Dashboard y al entrar al POS. No cambia
+lo que ve el usuario; cambia cómo se traen los datos por detrás.
+
+- **Dashboard — de ~5.000 lecturas a un puñado**: antes, cada vez que se abría
+  el panel, se leían todas las ventas (hasta 3.000) y todos los productos
+  (hasta 2.000) para calcular los números. Ahora los totales diarios se guardan
+  ya sumados día por día (`dailyStats`) y el Dashboard lee solo esos resúmenes,
+  el Top 5 de productos puntuales y las últimas 12 ventas. El aviso de "stock
+  por reponer" usa una consulta directa a los productos marcados, en lugar de
+  recorrerlos todos.
+- **POS — no vuelve a bajar todo cada vez**: al entrar al punto de venta, antes
+  se descargaban de nuevo todos los productos y clientes. Ahora se guardan en el
+  equipo y en cada apertura solo se sincroniza **lo que cambió** desde la última
+  vez (caché incremental por fecha de modificación).
+- **Bandera de reposición (`needsRestock`)**: cada producto queda marcado automá-
+  ticamente cuando su stock cae en o por debajo del mínimo. Se recalcula en
+  altas, ediciones, ajustes de stock, ventas, devoluciones y compras.
+- **Nota sobre datos ya existentes**: los productos cargados antes de esta
+  versión toman la bandera de reposición en su próxima modificación (venta,
+  ajuste o edición). Es automático y no requiere ninguna acción.
+- **Pruebas**: se agregaron pruebas automatizadas de la nueva lógica
+  (`tests/reads.test.mjs`): marcado de reposición, mezcla incremental de caché
+  y agregados del Dashboard.
+
 ## [1.1.3] — Tres correcciones menores de la revisión
 
 Ajustes puntuales sobre hallazgos menores. No cambia el alcance funcional.
