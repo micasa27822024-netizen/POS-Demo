@@ -2,55 +2,94 @@ rules_version = '2';
 // ============================================================================
 //  Firestore Security Rules — POS Pro
 //  Modelo de permisos basado en roles (admin / encargado / cajero).
-//  El rol se lee desde el documento users/{uid} del propio usuario.
+//  El rol se lee desde el documento users/{uid} del propio usuario y
+//  SOLO es válido si el usuario está activo (A2).
 // ============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function role() { return signedIn() ? userDoc().role : 'none'; }
-    function isActive() { return signedIn() && userDoc().active == true; }
-    function isAdmin() { return role() == 'admin'; }
-    function isStaff() { return role() == 'admin' || role() == 'encargado'; }
-    function anyRole() { return role() in ['admin','encargado','cajero']; }
+    function userDoc()  { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function hasProfile(){ return signedIn()
+      && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function isActive() { return hasProfile() && userDoc().active == true; }
+    // Sin perfil o inactivo => rol 'none' (sin permisos).
+    function role()     { return isActive() ? userDoc().role : 'none'; }
+    function isAdmin()  { return role() == 'admin'; }
+    function isStaff()  { return role() == 'admin' || role() == 'encargado'; }
+    function anyRole()  { return role() in ['admin','encargado','cajero']; }
+    function changedKeys(){ return request.resource.data.diff(resource.data).affectedKeys(); }
 
     // --- Usuarios: cada quien lee su doc; admin administra todos ---
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create, update, delete: if isAdmin();
-      // permitir que el propio usuario actualice solo su lastLogin
-      allow update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLogin']);
+      allow create, delete: if isAdmin();
+      // admin edita cualquiera; el propio usuario solo toca su lastLogin.
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && changedKeys().hasOnly(['lastLogin']));
     }
 
     // --- Catálogo: lectura para todo el personal; escritura staff ---
-    match /products/{id}      { allow read: if anyRole(); allow write: if isStaff(); }
+    // El cajero solo puede DESCONTAR stock (venta): stock + updatedAt y nunca aumentarlo.
+    match /products/{id} {
+      allow read: if anyRole();
+      allow create, delete: if isStaff();
+      allow update: if isStaff()
+        || (anyRole()
+            && changedKeys().hasOnly(['stock','updatedAt'])
+            && request.resource.data.stock <= resource.data.stock);
+    }
     match /categories/{id}    { allow read: if anyRole(); allow write: if isStaff(); }
     match /subcategories/{id} { allow read: if anyRole(); allow write: if isStaff(); }
 
-    // --- Ventas: crea cualquier rol operativo; anulación/borrado staff ---
-    match /sales/{id}      { allow read: if anyRole(); allow create: if anyRole();
-                             allow update: if isStaff(); allow delete: if isAdmin(); }
-    match /payments/{id}   { allow read: if anyRole(); allow create: if anyRole(); allow update,delete: if isStaff(); }
+    // --- Ventas: crea cualquier rol operativo (venta propia y completada) ---
+    match /sales/{id} {
+      allow read: if anyRole();
+      allow create: if anyRole()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'completada';
+      allow update: if isStaff();   // anulación / corrección
+      allow delete: if isAdmin();
+    }
+    match /payments/{id} {
+      allow read: if anyRole(); allow create: if anyRole();
+      allow update, delete: if isStaff();
+    }
 
     // --- Compras y proveedores: staff ---
     match /purchases/{id}  { allow read: if anyRole(); allow write: if isStaff(); }
     match /suppliers/{id}  { allow read: if anyRole(); allow write: if isStaff(); }
 
     // --- Clientes y cuenta corriente ---
-    match /clients/{id}            { allow read: if anyRole(); allow write: if anyRole(); }
-    match /accountsReceivable/{id} { allow read: if anyRole(); allow write: if anyRole(); }
+    // Cajero: crear cliente y actualizar SOLO saldo (balance) + updatedAt.
+    // Límite de crédito y datos personales => staff. Borrar => staff.
+    match /clients/{id} {
+      allow read: if anyRole();
+      allow create: if anyRole();
+      allow update: if isStaff()
+        || (anyRole() && changedKeys().hasOnly(['balance','updatedAt']));
+      allow delete: if isStaff();
+    }
+    match /accountsReceivable/{id} { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
     match /accountsPayable/{id}    { allow read: if anyRole(); allow write: if isStaff(); }
 
     // --- Stock y caja ---
-    match /stockMovements/{id} { allow read: if anyRole(); allow create: if anyRole(); allow update,delete: if isAdmin(); }
-    match /cashRegisters/{id}  { allow read: if anyRole(); allow write: if anyRole(); }
-    match /cashMovements/{id}  { allow read: if anyRole(); allow write: if anyRole(); }
+    match /stockMovements/{id} { allow read: if anyRole(); allow create: if anyRole(); allow update, delete: if isAdmin(); }
+    match /cashRegisters/{id}  { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
+    match /cashMovements/{id}  { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
     match /expenses/{id}       { allow read: if anyRole(); allow write: if isStaff(); }
 
-    // --- Auditoría: cualquiera agrega; solo admin lee; nadie edita/borra ---
-    match /auditLogs/{id} { allow read: if isAdmin(); allow create: if signedIn(); allow update,delete: if false; }
+    // --- Numeradores y resúmenes diarios (A3 / B1) ---
+    match /counters/{id}   { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
+    match /dailyStats/{id} { allow read: if anyRole(); allow create, update: if anyRole(); allow delete: if isAdmin(); }
+
+    // --- Auditoría: cada quien agrega su propio registro; solo admin lee ---
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow create: if anyRole() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
 
     // --- Configuración y plantillas: lectura todos, escritura admin ---
     match /settings/{id}         { allow read: if anyRole(); allow write: if isAdmin(); }
