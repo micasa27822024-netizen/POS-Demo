@@ -37,8 +37,9 @@ export function calcTotals(items,generalDiscount=0){
 }
 
 async function nextNumber(){
-  const sales=await DB.list('sales');
-  const max=sales.reduce((m,s)=>Math.max(m,s.number||0),1000);
+  const [sales,biz]=await Promise.all([DB.list('sales'),DB.get('settings','business')]);
+  const base=(biz&&parseInt(biz.numberStart,10))||1000;
+  const max=sales.reduce((m,s)=>Math.max(m,s.number||0),base);
   return max+1;
 }
 
