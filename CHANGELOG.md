@@ -2,6 +2,23 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.5] — El respaldo ahora incluye las cuentas por pagar
+
+Se completa el respaldo total del sistema para que no quede nada afuera.
+
+- **Cuentas por pagar en el respaldo**: la deuda con proveedores
+  (`accountsPayable`) **faltaba** en el archivo de respaldo. Ahora se incluye,
+  junto con las cuentas por cobrar que ya estaban. Al exportar el respaldo
+  (Configuración → Respaldo de datos) ya quedan guardadas todas las deudas.
+- **Gastos y plantillas — ya estaban cubiertos**: los gastos son egresos de
+  caja y viajan dentro de los movimientos de caja (`cashMovements`); las
+  plantillas de factura y ticket se guardan dentro de la configuración
+  (`settings`). Ambos ya se incluían en el respaldo; se dejó aclarado en el
+  código para que no haya dudas a futuro.
+- **Pruebas**: nuevas pruebas automatizadas (`tests/backup.test.mjs`) que
+  verifican que el respaldo incluya cuentas por pagar/cobrar, que no pierda
+  documentos al paginar y que los acentos/comas sobrevivan la ida y vuelta a CSV.
+
 ## [1.1.4] — Optimización de lecturas en Dashboard y POS
 
 Menos consumo de Firestore al abrir el Dashboard y al entrar al POS. No cambia
