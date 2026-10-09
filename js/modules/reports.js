@@ -4,6 +4,7 @@ import { renderShell } from '../components/shell.js';
 import { DB } from '../services/db.service.js';
 import { ok, err } from '../utils/toast.js';
 import { money, num, pct, fdate, dayStart, dayEnd, monthStart } from '../utils/format.js';
+import { esc as escapeHtml } from '../utils/escape.js';
 
 let USER, SALES=[], PURCH=[], REGS=[], from='', to='', preset='30';
 const DAY=86400000;
@@ -47,7 +48,7 @@ const PM={efectivo:'Efectivo',debito:'T. débito',credito:'T. crédito',transfer
 
 function barChart(data,fmt){
   const max=Math.max(1,...data.map(d=>d.value));
-  return `<div class="bars">${data.map(d=>`<div class="bar-row"><span class="bar-lbl">${d.label}</span>
+  return `<div class="bars">${data.map(d=>`<div class="bar-row"><span class="bar-lbl">${escapeHtml(d.label)}</span>
     <div class="bar-track"><div class="bar-fill" style="width:${(d.value/max*100).toFixed(1)}%"></div></div>
     <span class="bar-val">${fmt(d.value)}</span></div>`).join('')||'<p class="empty">Sin datos</p>'}</div>`;
 }
@@ -108,7 +109,7 @@ function paint(){
     <div class="grid grid-2 mt-16">
       <div class="card card-pad"><h3 style="margin-bottom:12px">🏆 Productos más vendidos</h3>
         <table class="table"><thead><tr><th>Producto</th><th class="ta-right">Cant.</th><th class="ta-right">Facturado</th></tr></thead>
-        <tbody>${r.topRev.map(p=>`<tr><td>${p.name}</td><td class="ta-right">${num(p.qty)}</td><td class="ta-right"><b>${money(p.rev)}</b></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Sin datos</td></tr>'}</tbody></table></div>
+        <tbody>${r.topRev.map(p=>`<tr><td>${escapeHtml(p.name)}</td><td class="ta-right">${num(p.qty)}</td><td class="ta-right"><b>${money(p.rev)}</b></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Sin datos</td></tr>'}</tbody></table></div>
       <div class="card card-pad"><h3 style="margin-bottom:12px">💳 Medios de pago</h3>${barChart(payRows,money)}
         <h3 style="margin:16px 0 12px">👤 Por vendedor</h3>${barChart(r.sellers,money)}</div></div>`;
 }

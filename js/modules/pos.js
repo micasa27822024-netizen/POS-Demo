@@ -6,6 +6,7 @@ import { money, num } from '../utils/format.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { can } from '../services/permissions.js';
 import { openPayment, showTicket } from './pos-pay.js';
+import { esc } from '../utils/escape.js';
 
 export let STATE={cart:[],generalDiscount:0,clientId:'',user:null};
 let PRODUCTS=[],CATS=[],CLIENTS=[],activeCat='';
@@ -37,7 +38,7 @@ function render(view){
       <div class="cart-client">
         <label style="font-size:11px;color:var(--text-2);font-weight:600">Cliente</label>
         <select class="select" id="cartClient" style="margin-top:4px">
-          ${CLIENTS.map(c=>`<option value="${c.id}" ${c.id===STATE.clientId?'selected':''}>${c.name} ${c.lastName||''}${c.balance>0?' — debe '+money(c.balance):''}</option>`).join('')}
+          ${CLIENTS.map(c=>`<option value="${esc(c.id)}" ${c.id===STATE.clientId?'selected':''}>${esc(c.name)} ${esc(c.lastName||'')}${c.balance>0?' — debe '+money(c.balance):''}</option>`).join('')}
         </select>
       </div>
       <div class="cart-items" id="cartItems"></div>
@@ -58,7 +59,7 @@ function render(view){
 function renderCats(){
   const host=document.getElementById('posCats');
   host.innerHTML=`<span class="chip ${activeCat===''?'active':''}" data-c="">Todos</span>`+
-    CATS.map(c=>`<span class="chip ${activeCat===c.id?'active':''}" data-c="${c.id}">${c.name}</span>`).join('');
+    CATS.map(c=>`<span class="chip ${activeCat===c.id?'active':''}" data-c="${esc(c.id)}">${esc(c.name)}</span>`).join('');
   host.querySelectorAll('[data-c]').forEach(ch=>ch.onclick=()=>{activeCat=ch.dataset.c;renderCats();
     renderGrid(document.getElementById('posSearch').value.toLowerCase());});
 }
@@ -71,10 +72,10 @@ function renderGrid(q){
   if(!list.length){ grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="big">🔍</div>Sin resultados</div>'; return; }
   grid.innerHTML=list.slice(0,120).map(p=>{
     const out=(p.stock||0)<=0;
-    const thumb=p.image?`<img src="${p.image}">`:'📦';
-    return `<div class="pcard ${out?'out':''}" data-id="${p.id}"><div class="thumb">${thumb}</div>
-      <div class="pinfo"><div class="pname">${p.name}</div><div class="pprice">${money(p.price)}</div>
-      <div class="pstock">${out?'Sin stock':'Stock: '+num(p.stock)+' '+p.unit}</div></div></div>`;}).join('');
+    const thumb=p.image?`<img src="${esc(p.image)}">`:'📦';
+    return `<div class="pcard ${out?'out':''}" data-id="${esc(p.id)}"><div class="thumb">${thumb}</div>
+      <div class="pinfo"><div class="pname">${esc(p.name)}</div><div class="pprice">${money(p.price)}</div>
+      <div class="pstock">${out?'Sin stock':'Stock: '+num(p.stock)+' '+esc(p.unit)}</div></div></div>`;}).join('');
   grid.querySelectorAll('[data-id]').forEach(el=>el.onclick=()=>addToCart(PRODUCTS.find(p=>p.id===el.dataset.id)));
 }
 
@@ -107,8 +108,8 @@ function paintCart(){
     const step=isDecimalUnit(it.unit)?'0.001':'1';
     const line=+(it.price*it.qty - (it.discount||0)).toFixed(2);
     return `<div class="citem">
-      <div style="flex:1"><div class="ci-name">${it.name}</div>
-        <div class="ci-sub">${money(it.price)} / ${it.unit}${it.discount?` · desc ${money(it.discount)}`:''}</div>
+      <div style="flex:1"><div class="ci-name">${esc(it.name)}</div>
+        <div class="ci-sub">${money(it.price)} / ${esc(it.unit)}${it.discount?` · desc ${money(it.discount)}`:''}</div>
         <div class="flex gap-8 mt-8">
           ${canPrice?`<input class="input" style="width:90px;padding:4px 6px" type="number" step="0.01" value="${it.price}" data-price="${i}" title="Precio">`:''}
           ${canDisc?`<input class="input" style="width:80px;padding:4px 6px" type="number" step="0.01" value="${it.discount||0}" data-disc="${i}" title="Descuento $">`:''}
@@ -162,6 +163,18 @@ async function doCheckout(){
     STATE.cart=[]; STATE.generalDiscount=0; paintCart();
     renderGrid(document.getElementById('posSearch').value.toLowerCase());
     showTicket(done,client);
-  }catch(ex){ err(ex.message||'No se pudo registrar la venta'); }
+  }catch(ex){
+    err(ex.message||'No se pudo registrar la venta');
+    // A3: la venta falló → NO se vacía el carrito. Refrescamos el stock real
+    // de los productos del carrito para que la grilla quede consistente.
+    try{
+      for(const it of STATE.cart){
+        const fresh=await DB.get('products',it.productId);
+        const p=PRODUCTS.find(x=>x.id===it.productId);
+        if(fresh&&p) p.stock=fresh.stock;
+      }
+      renderGrid(document.getElementById('posSearch').value.toLowerCase());
+    }catch(_){}
+  }
 }
 

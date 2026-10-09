@@ -8,6 +8,7 @@ import { validateForm, V } from '../utils/validate.js';
 import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
 import { money, fdatetime } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, LIST=[], q='';
 (async()=>{
@@ -34,8 +35,8 @@ function paint(){
   document.getElementById('host').innerHTML=`<div class="card"><table class="table">
     <thead><tr><th>Cliente</th><th>DNI</th><th>Teléfono</th><th class="ta-right">Límite</th><th class="ta-right">Saldo</th><th></th></tr></thead>
     <tbody>${rows.map(c=>{const deuda=c.balance||0;
-      return `<tr><td><b>${full(c)}</b><br><span style="font-size:11px;color:var(--text-3)">${c.email||c.city||''}</span></td>
-      <td>${c.dni||'—'}</td><td>${c.phone||'—'}</td>
+      return `<tr><td><b>${esc(full(c))}</b><br><span style="font-size:11px;color:var(--text-3)">${esc(c.email||c.city||'')}</span></td>
+      <td>${esc(c.dni||'—')}</td><td>${esc(c.phone||'—')}</td>
       <td class="ta-right">${c.creditLimit?money(c.creditLimit):'—'}</td>
       <td class="ta-right" style="color:${deuda>0?'var(--danger)':'var(--text-2)'};font-weight:700">${money(deuda)}</td>
       <td class="ta-right"><div class="flex gap-8 justify-end">
@@ -54,14 +55,14 @@ function paint(){
 function openForm(c){
   const f=document.createElement('form');
   f.innerHTML=`<div class="grid grid-2">
-    <div class="field"><label>Nombre *</label><input class="input" name="name" value="${c?.name||''}"><div class="err-msg"></div></div>
-    <div class="field"><label>Apellido</label><input class="input" name="lastName" value="${c?.lastName||''}"></div>
-    <div class="field"><label>DNI / CUIT</label><input class="input" name="dni" value="${c?.dni||''}"></div>
-    <div class="field"><label>Teléfono</label><input class="input" name="phone" value="${c?.phone||''}"></div>
-    <div class="field"><label>Email</label><input class="input" name="email" value="${c?.email||''}"><div class="err-msg"></div></div>
+    <div class="field"><label>Nombre *</label><input class="input" name="name" value="${esc(c?.name||'')}"><div class="err-msg"></div></div>
+    <div class="field"><label>Apellido</label><input class="input" name="lastName" value="${esc(c?.lastName||'')}"></div>
+    <div class="field"><label>DNI / CUIT</label><input class="input" name="dni" value="${esc(c?.dni||'')}"></div>
+    <div class="field"><label>Teléfono</label><input class="input" name="phone" value="${esc(c?.phone||'')}"></div>
+    <div class="field"><label>Email</label><input class="input" name="email" value="${esc(c?.email||'')}"><div class="err-msg"></div></div>
     <div class="field"><label>Límite de crédito</label><input class="input" name="creditLimit" type="number" step="0.01" value="${c?.creditLimit??0}"></div>
-    <div class="field"><label>Ciudad</label><input class="input" name="city" value="${c?.city||''}"></div>
-    <div class="field"><label>Provincia</label><input class="input" name="province" value="${c?.province||''}"></div>
+    <div class="field"><label>Ciudad</label><input class="input" name="city" value="${esc(c?.city||'')}"></div>
+    <div class="field"><label>Provincia</label><input class="input" name="province" value="${esc(c?.province||'')}"></div>
   </div>`;
   const save=document.createElement('button'); save.className='btn btn-primary'; save.textContent=c?'Guardar':'Crear';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
@@ -79,12 +80,12 @@ async function openCC(c){
   const movs=(await DB.list('accountsReceivable',{where:[['clientId','==',c.id]]})).sort((a,b)=>b.at-a.at);
   const box=document.createElement('div');
   box.innerHTML=`<div class="flex justify-between items-center" style="margin-bottom:12px">
-    <div><b style="font-size:16px">${full(c)}</b><br><span style="font-size:12px;color:var(--text-3)">Límite: ${c.creditLimit?money(c.creditLimit):'sin límite'}</span></div>
+    <div><b style="font-size:16px">${esc(full(c))}</b><br><span style="font-size:12px;color:var(--text-3)">Límite: ${c.creditLimit?money(c.creditLimit):'sin límite'}</span></div>
     <div class="ta-right"><span style="font-size:12px;color:var(--text-3)">Saldo deudor</span><br>
       <b style="font-size:20px;color:${(c.balance||0)>0?'var(--danger)':'var(--success)'}">${money(c.balance||0)}</b></div></div>
     <button class="btn btn-primary btn-block" id="btnPay" ${(c.balance||0)<=0?'disabled':''}>💵 Registrar pago / abono</button>
     <div class="mt-16"><table class="table"><thead><tr><th>Fecha</th><th>Concepto</th><th class="ta-right">Monto</th><th class="ta-right">Saldo</th></tr></thead>
-    <tbody>${movs.map(m=>`<tr><td>${fdatetime(m.at)}</td><td>${m.concept||(m.type==='credito'?'Pago':'Cargo')}</td>
+    <tbody>${movs.map(m=>`<tr><td>${fdatetime(m.at)}</td><td>${esc(m.concept||(m.type==='credito'?'Pago':'Cargo'))}</td>
       <td class="ta-right" style="color:${m.type==='credito'?'var(--success)':'var(--danger)'}">${m.type==='credito'?'-':'+'}${money(m.amount)}</td>
       <td class="ta-right">${money(m.balance)}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Sin movimientos</td></tr>'}</tbody></table></div>`;
   const m=openModal({title:'Cuenta corriente',body:box,footer:null,width:680});

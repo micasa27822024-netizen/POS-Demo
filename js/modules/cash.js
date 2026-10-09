@@ -7,6 +7,7 @@ import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
 import { money, fdatetime } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, REG=null, MOVS=[];
 (async()=>{
@@ -39,7 +40,7 @@ function render(view){
     return;
   }
   const exp=expected(), t=totals();
-  view.innerHTML=`<div class="page-head"><div><h1>Caja</h1><p>Abierta por ${REG.openedByName||''} · ${fdatetime(REG.openedAt)}</p></div>
+  view.innerHTML=`<div class="page-head"><div><h1>Caja</h1><p>Abierta por ${esc(REG.openedByName||'')} · ${fdatetime(REG.openedAt)}</p></div>
     <div class="flex gap-8"><button class="btn btn-ghost" id="btnIn">➕ Ingreso</button>
       <button class="btn btn-ghost" id="btnOut">➖ Egreso</button>
       <button class="btn btn-danger" id="btnClose" ${can(USER.role,'cash.close')?'':'disabled'}>🔒 Cerrar caja</button></div></div>
@@ -53,7 +54,7 @@ function render(view){
       <h2 style="margin-top:4px;font-size:26px">${money(exp)}</h2></div><div style="font-size:40px">🧾</div></div>
     <h3 class="mt-16" style="margin-bottom:8px">Movimientos</h3>
     <div class="card"><table class="table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th class="ta-right">Monto</th></tr></thead>
-    <tbody>${MOVS.map(m=>`<tr><td>${fdatetime(m.at)}</td><td><span class="chip">${m.type}</span></td><td>${m.concept||'—'}</td>
+    <tbody>${MOVS.map(m=>`<tr><td>${fdatetime(m.at)}</td><td><span class="chip">${esc(m.type)}</span></td><td>${esc(m.concept||'—')}</td>
       <td class="ta-right" style="color:${signed(m)<0?'var(--danger)':'var(--success)'};font-weight:600">${signed(m)<0?'-':'+'}${money(Math.abs(m.amount))}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Sin movimientos aún</td></tr>'}</tbody></table></div>`;
   document.getElementById('btnIn').onclick=()=>openMov('ingreso');
   document.getElementById('btnOut').onclick=()=>openMov('egreso');

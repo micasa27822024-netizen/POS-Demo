@@ -9,6 +9,7 @@ import { ok, err, warn } from '../utils/toast.js';
 import { validateForm, V } from '../utils/validate.js';
 import { can } from '../services/permissions.js';
 import { exportCSV, parseCSV } from '../utils/csv.js';
+import { esc } from '../utils/escape.js';
 
 let USER,PRODUCTS=[],CATS=[],SUBS=[],SUPS=[];
 let filter={q:'',cat:'',status:'all'};
@@ -41,7 +42,7 @@ function render(view){
    <div class="toolbar">
      <input class="input" id="fq" placeholder="🔍 Buscar por nombre, código o barras" style="min-width:260px">
      <select class="select" id="fcat"><option value="">Todas las categorías</option>
-       ${CATS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select>
+       ${CATS.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
      <select class="select" id="fstatus"><option value="all">Todos</option><option value="active">Activos</option>
        <option value="inactive">Inactivos</option><option value="low">Stock bajo</option><option value="out">Sin stock</option></select>
    </div>
@@ -85,12 +86,12 @@ function paint(){
     <th class="text-right">Costo</th><th class="text-right">Venta</th><th class="text-right">Margen</th>
     <th>Estado</th><th></th></tr></thead><tbody>
     ${rows.map(p=>{const m=margin(p.cost,p.price);
-      const img=p.image?`<img src="${p.image}" style="width:38px;height:38px;border-radius:8px;object-fit:cover">`
+      const img=p.image?`<img src="${esc(p.image)}" style="width:38px;height:38px;border-radius:8px;object-fit:cover">`
         :`<div style="width:38px;height:38px;border-radius:8px;background:var(--surface-3);display:grid;place-items:center">📦</div>`;
       return `<tr>
-      <td><div class="flex items-center gap-12">${img}<div><b>${p.name}</b><br><span style="font-size:11px;color:var(--text-3)">${p.brand||''} · ${p.unit}</span></div></div></td>
-      <td><span class="text-muted" style="font-size:12px">${p.code||'—'}</span><br><span style="font-size:11px;color:var(--text-3)">${p.barcode||''}</span></td>
-      <td>${catName(p.categoryId)}</td>
+      <td><div class="flex items-center gap-12">${img}<div><b>${esc(p.name)}</b><br><span style="font-size:11px;color:var(--text-3)">${esc(p.brand||'')} · ${esc(p.unit)}</span></div></div></td>
+      <td><span class="text-muted" style="font-size:12px">${esc(p.code||'—')}</span><br><span style="font-size:11px;color:var(--text-3)">${esc(p.barcode||'')}</span></td>
+      <td>${esc(catName(p.categoryId))}</td>
       <td>${stockBadge(p)}</td>
       <td class="text-right">${money(p.cost)}</td>
       <td class="text-right"><b>${money(p.price)}</b></td>
@@ -111,28 +112,28 @@ function paint(){
 function openForm(p){
   const isEdit=!!p; const canPrice=can(USER.role,'price.edit');
   const f=document.createElement('form');
-  const subOpts=sid=>SUBS.map(s=>`<option value="${s.id}" ${p&&p.subcategoryId===s.id?'selected':''}>${s.name}</option>`).join('');
+  const subOpts=sid=>SUBS.map(s=>`<option value="${esc(s.id)}" ${p&&p.subcategoryId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
   f.innerHTML=`
    <div class="flex gap-16" style="align-items:flex-start">
      <div style="flex:none;text-align:center">
-       <div id="imgPrev" style="width:110px;height:110px;border-radius:12px;background:var(--surface-3);display:grid;place-items:center;overflow:hidden;font-size:30px">${p?.image?`<img src="${p.image}" style="width:100%;height:100%;object-fit:cover">`:'📦'}</div>
+       <div id="imgPrev" style="width:110px;height:110px;border-radius:12px;background:var(--surface-3);display:grid;place-items:center;overflow:hidden;font-size:30px">${p?.image?`<img src="${esc(p.image)}" style="width:100%;height:100%;object-fit:cover">`:'📦'}</div>
        <label class="btn btn-sm btn-ghost mt-8" style="display:inline-flex">Imagen<input type="file" name="image" accept="image/*" hidden></label>
      </div>
      <div style="flex:1">
        <div class="grid grid-2">
-         <div class="field"><label>Nombre *</label><input class="input" name="name" value="${p?.name||''}"><div class="err-msg"></div></div>
-         <div class="field"><label>Marca</label><input class="input" name="brand" value="${p?.brand||''}"></div>
+         <div class="field"><label>Nombre *</label><input class="input" name="name" value="${esc(p?.name||'')}"><div class="err-msg"></div></div>
+         <div class="field"><label>Marca</label><input class="input" name="brand" value="${esc(p?.brand||'')}"></div>
        </div>
        <div class="grid grid-2">
-         <div class="field"><label>Código interno</label><input class="input" name="code" value="${p?.code||''}"></div>
-         <div class="field"><label>Código de barras</label><input class="input" name="barcode" value="${p?.barcode||''}"></div>
+         <div class="field"><label>Código interno</label><input class="input" name="code" value="${esc(p?.code||'')}"></div>
+         <div class="field"><label>Código de barras</label><input class="input" name="barcode" value="${esc(p?.barcode||'')}"></div>
        </div>
      </div>
    </div>
-   <div class="field"><label>Descripción</label><input class="input" name="description" value="${p?.description||''}"></div>
+   <div class="field"><label>Descripción</label><input class="input" name="description" value="${esc(p?.description||'')}"></div>
    <div class="grid grid-3">
      <div class="field"><label>Categoría</label><select class="select" name="categoryId">
-       <option value="">—</option>${CATS.map(c=>`<option value="${c.id}" ${p&&p.categoryId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+       <option value="">—</option>${CATS.map(c=>`<option value="${esc(c.id)}" ${p&&p.categoryId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
      <div class="field"><label>Subcategoría</label><select class="select" name="subcategoryId"><option value="">—</option>${subOpts()}</select></div>
      <div class="field"><label>Unidad</label><select class="select" name="unit">${UNITS.map(u=>`<option value="${u.v}" ${p&&p.unit===u.v?'selected':''}>${u.l}</option>`).join('')}</select></div>
    </div>
@@ -144,7 +145,7 @@ function openForm(p){
    <div class="grid grid-3">
      <div class="field"><label>IVA %</label><input class="input" name="iva" type="number" value="${p?.iva??21}"></div>
      <div class="field"><label>Stock actual</label><input class="input" name="stock" type="number" step="0.001" value="${p?.stock??0}"></div>
-     <div class="field"><label>Proveedor</label><select class="select" name="supplierId"><option value="">—</option>${SUPS.map(s=>`<option value="${s.id}" ${p&&p.supplierId===s.id?'selected':''}>${s.tradeName||s.legalName}</option>`).join('')}</select></div>
+     <div class="field"><label>Proveedor</label><select class="select" name="supplierId"><option value="">—</option>${SUPS.map(s=>`<option value="${esc(s.id)}" ${p&&p.supplierId===s.id?'selected':''}>${esc(s.tradeName||s.legalName)}</option>`).join('')}</select></div>
    </div>
    <div class="grid grid-2">
      <div class="field"><label>Stock mínimo</label><input class="input" name="stockMin" type="number" step="0.001" value="${p?.stockMin??0}"></div>
@@ -195,7 +196,7 @@ function doImport(){
   body.querySelector('#impFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;
     const text=await file.text(); parsed=parseCSV(text);
     body.querySelector('#impPrev').innerHTML=`<div class="table-wrap"><table class="tbl"><thead><tr><th>Nombre</th><th>Código</th><th>Costo</th><th>Venta</th><th>Stock</th></tr></thead><tbody>
-      ${parsed.slice(0,8).map(r=>`<tr><td>${r.name||''}</td><td>${r.code||''}</td><td>${r.cost||0}</td><td>${r.price||0}</td><td>${r.stock||0}</td></tr>`).join('')}</tbody></table></div>
+      ${parsed.slice(0,8).map(r=>`<tr><td>${esc(r.name||'')}</td><td>${esc(r.code||'')}</td><td>${esc(String(r.cost||0))}</td><td>${esc(String(r.price||0))}</td><td>${esc(String(r.stock||0))}</td></tr>`).join('')}</tbody></table></div>
       <p class="text-muted mt-8" style="font-size:12px">${parsed.length} registro(s) a importar</p>`;
     confirm.disabled=!parsed.length;};
   confirm.onclick=async()=>{let n=0;for(const r of parsed){if(!r.name)continue;

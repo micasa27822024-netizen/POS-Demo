@@ -3,6 +3,7 @@ import { renderShell } from '../components/shell.js';
 import { DB } from '../services/db.service.js';
 import { money, num, fdatetime, dayStart, monthStart } from '../utils/format.js';
 import { currentTheme } from '../utils/theme.js';
+import { esc } from '../utils/escape.js';
 
 const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',cuenta_corriente:'Cta. Corriente',otros:'Otros'};
 
@@ -39,7 +40,7 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
     <div class="label">${label}</div><div class="value">${value}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
 
   view.innerHTML=`
-   <div class="page-head"><div><h1>Hola, ${user.name.split(' ')[0]} 👋</h1><p>Resumen general de tu negocio</p></div></div>
+   <div class="page-head"><div><h1>Hola, ${esc(user.name.split(' ')[0])} 👋</h1><p>Resumen general de tu negocio</p></div></div>
    <div class="grid grid-4">
      ${stat('💰','var(--sales)','Ventas de hoy',money(totToday),todaySales.length+' operaciones')}
      ${stat('📅','var(--primary)','Ventas del mes',money(totMonth),monthSales.length+' operaciones')}
@@ -74,25 +75,25 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   const low=[...noStock,...lowStock];
   document.getElementById('lowStockList').innerHTML = low.length? low.slice(0,6).map(p=>
     `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <span>${p.name}</span><span class="badge ${p.stock<=0?'badge-danger':'badge-warn'}">${num(p.stock)} / min ${p.stockMin}</span></div>`).join('')
+      <span>${esc(p.name)}</span><span class="badge ${p.stock<=0?'badge-danger':'badge-warn'}">${num(p.stock)} / min ${p.stockMin}</span></div>`).join('')
     : '<div class="empty">✅ Todo el stock está OK</div>';
 
   const recent=[...valid].sort((a,b)=>b.at-a.at).slice(0,6);
   document.getElementById('recentSales').innerHTML = recent.length? recent.map(s=>{
     const cl=clients.find(c=>c.id===s.clientId);
     return `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <div><b>#${s.number}</b> <span class="text-muted" style="font-size:12px">${cl?cl.name+' '+(cl.lastName||''):''}</span><br>
+      <div><b>#${esc(String(s.number))}</b> <span class="text-muted" style="font-size:12px">${esc(cl?cl.name+' '+(cl.lastName||''):'')}</span><br>
       <span style="font-size:11px;color:var(--text-3)">${fdatetime(s.at)}</span></div>
       <b class="text-sales">${money(s.total)}</b></div>`; }).join('') : '<div class="empty">Sin ventas aún</div>';
 
   document.getElementById('debtorsList').innerHTML = debtors.length? debtors.slice(0,6).map(c=>
     `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <span>${c.name} ${c.lastName||''}</span><b class="text-alert">${money(c.balance)}</b></div>`).join('')
+      <span>${esc((c.name||'')+' '+(c.lastName||''))}</span><b class="text-alert">${money(c.balance)}</b></div>`).join('')
     : '<div class="empty">Sin deudores</div>';
 
   document.getElementById('supList').innerHTML = suppliers.length? suppliers.slice(0,6).map(s=>
     `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <span>${s.tradeName||s.legalName}</span><span class="badge badge-neutral">${s.city||''}</span></div>`).join('')
+      <span>${esc(s.tradeName||s.legalName||'')}</span><span class="badge badge-neutral">${esc(s.city||'')}</span></div>`).join('')
     : '<div class="empty">Sin proveedores</div>';
 
   // ===== Charts =====

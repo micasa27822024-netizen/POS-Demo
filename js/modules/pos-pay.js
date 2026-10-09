@@ -3,6 +3,7 @@ import { money } from '../utils/format.js';
 import { PAYMENT_METHODS } from '../services/sales.service.js';
 import { warn } from '../utils/toast.js';
 import { DB } from '../services/db.service.js';
+import { esc } from '../utils/escape.js';
 
 // Abre el modal de cobro. Resuelve con {payments:[{method,amount}], cashReceived}
 // o con null si se cancela.
@@ -26,7 +27,7 @@ export function openPayment({total,client,canCC}){
         <div style="text-align:center;margin-bottom:16px">
           <div style="font-size:12px;color:var(--text-2)">Total a cobrar</div>
           <div style="font-size:32px;font-weight:800">${money(total)}</div>
-          ${client?`<div style="font-size:12px;color:var(--text-3);margin-top:2px">Cliente: ${client.name} ${client.lastName||''}</div>`:''}
+          ${client?`<div style="font-size:12px;color:var(--text-3);margin-top:2px">Cliente: ${esc((client.name||'')+' '+(client.lastName||''))}</div>`:''}
         </div>
         <label style="font-size:11px;color:var(--text-2);font-weight:700">Agregar medio de pago</label>
         <div class="pay-methods" style="margin-top:6px">
@@ -76,20 +77,20 @@ export async function showTicket(sale,client){
   const PM={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',cuenta_corriente:'Cta. Cte.',otros:'Otros'};
   const body=document.createElement('div');
   body.innerHTML=`<div id="ticket" style="font-family:'Courier New',monospace;font-size:12.5px;background:#fff;color:#000;padding:16px;border-radius:8px;max-width:300px;margin:0 auto;line-height:1.5">
-    <div style="text-align:center"><b style="font-size:15px">${biz.name||'Comercio'}</b><br>
-      ${biz.address?biz.address+'<br>':''}${biz.cuit?'CUIT: '+biz.cuit+'<br>':''}${biz.phone?'Tel: '+biz.phone:''}</div>
+    <div style="text-align:center"><b style="font-size:15px">${esc(biz.name||'Comercio')}</b><br>
+      ${biz.address?esc(biz.address)+'<br>':''}${biz.cuit?'CUIT: '+esc(biz.cuit)+'<br>':''}${biz.phone?'Tel: '+esc(biz.phone):''}</div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
-    <div>Comprobante interno N° ${sale.number}<br>${new Date(sale.at).toLocaleString('es-AR')}<br>
-      Cliente: ${sale.clientName||'Consumidor Final'}<br>Vendedor: ${sale.userName}</div>
+    <div>Comprobante interno N° ${esc(String(sale.number))}<br>${new Date(sale.at).toLocaleString('es-AR')}<br>
+      Cliente: ${esc(sale.clientName||'Consumidor Final')}<br>Vendedor: ${esc(sale.userName||'')}</div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
-    ${sale.items.map(it=>`<div style="display:flex;justify-content:space-between"><span>${it.qty} ${it.unit} x ${it.name}</span></div>
+    ${sale.items.map(it=>`<div style="display:flex;justify-content:space-between"><span>${esc(String(it.qty))} ${esc(it.unit||'')} x ${esc(it.name)}</span></div>
       <div style="display:flex;justify-content:space-between"><span>&nbsp;&nbsp;@ ${money(it.price)}</span><b>${money(it.price*it.qty-(it.discount||0))}</b></div>`).join('')}
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
     <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${money(sale.subtotal)}</span></div>
     ${sale.discount?`<div style="display:flex;justify-content:space-between"><span>Descuento</span><span>- ${money(sale.discount)}</span></div>`:''}
     <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:bold"><span>TOTAL</span><span>${money(sale.total)}</span></div>
     <div style="border-top:1px dashed #000;margin:8px 0"></div>
-    ${(sale.payments||[]).map(p=>`<div style="display:flex;justify-content:space-between"><span>${PM[p.method]||p.method}</span><span>${money(p.amount)}</span></div>`).join('')}
+    ${(sale.payments||[]).map(p=>`<div style="display:flex;justify-content:space-between"><span>${esc(PM[p.method]||p.method)}</span><span>${money(p.amount)}</span></div>`).join('')}
     ${sale.change?`<div style="display:flex;justify-content:space-between"><span>Vuelto</span><span>${money(sale.change)}</span></div>`:''}
     <div style="text-align:center;margin-top:10px">¡Gracias por su compra!</div>
   </div>`;

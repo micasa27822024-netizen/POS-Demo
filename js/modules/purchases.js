@@ -7,6 +7,7 @@ import { openModal } from '../utils/modal.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { money, num, fdatetime } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, LIST=[], SUPS=[], PRODS=[];
 (async()=>{
@@ -29,7 +30,7 @@ function render(view){
 function paint(){
   document.getElementById('host').innerHTML=`<div class="card"><table class="table">
     <thead><tr><th>Nº</th><th>Fecha</th><th>Proveedor</th><th class="ta-right">Total</th><th class="ta-right">Deuda</th><th></th></tr></thead>
-    <tbody>${LIST.map(p=>`<tr><td><b>#${p.number}</b></td><td>${fdatetime(p.at)}</td><td>${p.supplierName||'—'}</td>
+    <tbody>${LIST.map(p=>`<tr><td><b>#${esc(String(p.number))}</b></td><td>${fdatetime(p.at)}</td><td>${esc(p.supplierName||'—')}</td>
       <td class="ta-right"><b>${money(p.total)}</b></td>
       <td class="ta-right" style="color:${(p.debt||0)>0?'var(--danger)':'var(--success)'}">${money(p.debt||0)}</td>
       <td class="ta-right"><button class="btn btn-sm btn-ghost" data-v="${p.id}">👁 Ver</button></td></tr>`).join('')||'<tr><td colspan="6" class="empty">Sin compras registradas</td></tr>'}</tbody></table></div>`;
@@ -43,10 +44,10 @@ function newPurchase(){
   cart=[];
   const box=document.createElement('div');
   box.innerHTML=`<div class="grid grid-2">
-    <div class="field"><label>Proveedor *</label><select class="select" id="sup">${SUPS.map(s=>`<option value="${s.id}">${s.tradeName||s.legalName}</option>`).join('')}</select></div>
+    <div class="field"><label>Proveedor *</label><select class="select" id="sup">${SUPS.map(s=>`<option value="${esc(s.id)}">${esc(s.tradeName||s.legalName)}</option>`).join('')}</select></div>
     <div class="field"><label>Nro. factura/remito</label><input class="input" id="inv" placeholder="opcional"></div></div>
     <div class="field"><label>Agregar producto</label><div class="flex gap-8">
-      <select class="select" id="prod" style="flex:1">${PRODS.map(p=>`<option value="${p.id}">${p.name} (stock ${num(p.stock||0)})</option>`).join('')}</select>
+      <select class="select" id="prod" style="flex:1">${PRODS.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} (stock ${num(p.stock||0)})</option>`).join('')}</select>
       <button type="button" class="btn btn-ghost" id="add">➕</button></div></div>
     <div id="lines" class="mt-8"></div>
     <div style="max-width:280px;margin-left:auto;margin-top:10px">
@@ -60,7 +61,7 @@ function newPurchase(){
   const paintLines=()=>{
     const total=cart.reduce((s,l)=>s+l.qty*l.cost,0);
     box.querySelector('#lines').innerHTML=cart.length?`<table class="table"><thead><tr><th>Producto</th><th>Cant.</th><th>Costo unit.</th><th class="ta-right">Subtotal</th><th></th></tr></thead>
-      <tbody>${cart.map((l,i)=>`<tr><td>${l.name}</td>
+      <tbody>${cart.map((l,i)=>`<tr><td>${esc(l.name)}</td>
         <td><input class="input input-sm" data-q="${i}" type="number" step="0.001" value="${l.qty}" style="width:80px"></td>
         <td><input class="input input-sm" data-c="${i}" type="number" step="0.01" value="${l.cost}" style="width:100px"></td>
         <td class="ta-right">${money(l.qty*l.cost)}</td>
@@ -85,37 +86,53 @@ function newPurchase(){
     }catch(ex){ err(ex.message||'No se pudo registrar'); save.disabled=false; }
   };
 }
-async function nextNumber(){ return LIST.reduce((m,p)=>Math.max(m,p.number||0),100)+1; }
 async function confirmPurchase({supplierId,invoice,paid,method}){
   const sup=SUPS.find(s=>s.id===supplierId);
   const items=cart.map(l=>({productId:l.productId,name:l.name,qty:l.qty,cost:l.cost,subtotal:+(l.qty*l.cost).toFixed(2)}));
   const total=+items.reduce((s,i)=>s+i.subtotal,0).toFixed(2);
-  const paidReal=method==='cuenta_corriente'?Math.min(paid,total):Math.min(paid,total);
+  const paidReal=Math.min(paid,total);
   const debt=+(total-paidReal).toFixed(2);
-  const number=await nextNumber();
-  const purchase=await DB.add('purchases',{number,supplierId,supplierName:sup?.tradeName||sup?.legalName||'—',invoice,
-    items,total,paid:paidReal,debt,method,status:'completada',userId:USER.id,userName:USER.name,at:Date.now()});
-  for(const it of items){
-    try{ await Products.moveStock({productId:it.productId,type:'compra',qty:it.qty,reason:'Compra #'+number,userId:USER.id,userName:USER.name,refId:purchase.id});
-      await DB.update('products',it.productId,{cost:it.cost}); }catch(e){ console.warn(e); }
-  }
+  // Caja abierta (consulta fuera de la transacción).
+  let openCash=null;
   if(method!=='cuenta_corriente' && paidReal>0){
-    const open=(await DB.list('cashRegisters',{where:[['status','==','abierta']]}))[0];
-    if(open) await DB.add('cashMovements',{registerId:open.id,type:'egreso',amount:paidReal,concept:'Compra #'+number+' '+(sup?.tradeName||''),userId:USER.id,at:Date.now()});
+    const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
+    openCash=regs.find(r=>r.openedBy===USER.id)||regs[0]||null;
   }
-  if(debt>0) await DB.add('accountsPayable',{supplierId,type:'debito',amount:debt,concept:'Compra #'+number,purchaseId:purchase.id,userId:USER.id,at:Date.now()});
-  await Audit.log('purchase','purchase',{id:purchase.id,number,total});
+  const purchase=await DB.transaction(async(tx)=>{
+    // LECTURAS
+    const counter=await tx.get('counters','purchases');
+    const prod={};
+    for(const it of items){ prod[it.productId]=await tx.get('products',it.productId); }
+    // NUMERACIÓN ATÓMICA
+    const number = counter ? (counter.last||100)+1 : 101;
+    tx.set('counters','purchases',{last:number});
+    // ESCRITURAS
+    const purchaseId=tx.add('purchases',{number,supplierId,supplierName:sup?.tradeName||sup?.legalName||'—',invoice,
+      items,total,paid:paidReal,debt,method,status:'completada',userId:USER.id,userName:USER.name,at:Date.now()});
+    for(const it of items){ const p=prod[it.productId];
+      const newStock=+(((p&&+p.stock)||0)+it.qty).toFixed(3);
+      tx.update('products',it.productId,{stock:DB.increment(it.qty),cost:it.cost,updatedAt:Date.now()});
+      tx.add('stockMovements',{productId:it.productId,productName:(p&&p.name)||it.name,type:'compra',qty:it.qty,delta:it.qty,
+        stockAfter:newStock,reason:'Compra #'+number,userId:USER.id,userName:USER.name,refId:purchaseId,at:Date.now()});
+    }
+    if(openCash) tx.add('cashMovements',{registerId:openCash.id,type:'egreso',amount:paidReal,
+      concept:'Compra #'+number+' '+(sup?.tradeName||''),userId:USER.id,at:Date.now()});
+    if(debt>0) tx.add('accountsPayable',{supplierId,type:'debito',amount:debt,concept:'Compra #'+number,
+      purchaseId,userId:USER.id,at:Date.now()});
+    return {id:purchaseId,number,total};
+  });
+  await Audit.log('purchase','purchase',{id:purchase.id,number:purchase.number,total});
   return purchase;
 }
 const PM={efectivo:'Efectivo',transferencia:'Transferencia',cuenta_corriente:'Cuenta corriente'};
 function detail(p){
   const box=document.createElement('div');
   box.innerHTML=`<div class="flex justify-between" style="margin-bottom:10px">
-    <div><b style="font-size:18px">Compra #${p.number}</b><br><span style="font-size:12px;color:var(--text-3)">${fdatetime(p.at)} · ${p.userName||''}</span></div>
-    <div class="ta-right"><span style="font-size:12px;color:var(--text-3)">Proveedor</span><br><b>${p.supplierName||'—'}</b></div></div>
-    ${p.invoice?`<p style="font-size:12px;color:var(--text-3)">Factura/remito: ${p.invoice}</p>`:''}
+    <div><b style="font-size:18px">Compra #${esc(String(p.number))}</b><br><span style="font-size:12px;color:var(--text-3)">${fdatetime(p.at)} · ${esc(p.userName||'')}</span></div>
+    <div class="ta-right"><span style="font-size:12px;color:var(--text-3)">Proveedor</span><br><b>${esc(p.supplierName||'—')}</b></div></div>
+    ${p.invoice?`<p style="font-size:12px;color:var(--text-3)">Factura/remito: ${esc(p.invoice)}</p>`:''}
     <table class="table"><thead><tr><th>Producto</th><th class="ta-right">Cant.</th><th class="ta-right">Costo</th><th class="ta-right">Subtotal</th></tr></thead>
-    <tbody>${(p.items||[]).map(it=>`<tr><td>${it.name}</td><td class="ta-right">${num(it.qty)}</td><td class="ta-right">${money(it.cost)}</td><td class="ta-right">${money(it.subtotal)}</td></tr>`).join('')}</tbody></table>
+    <tbody>${(p.items||[]).map(it=>`<tr><td>${esc(it.name)}</td><td class="ta-right">${num(it.qty)}</td><td class="ta-right">${money(it.cost)}</td><td class="ta-right">${money(it.subtotal)}</td></tr>`).join('')}</tbody></table>
     <div style="max-width:260px;margin-left:auto;margin-top:12px;font-size:14px">
       <div class="flex justify-between" style="font-size:18px;font-weight:800"><span>TOTAL</span><span>${money(p.total)}</span></div>
       <div class="flex justify-between"><span>Pagado (${PM[p.method]||p.method})</span><span>${money(p.paid||0)}</span></div>

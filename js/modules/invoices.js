@@ -5,6 +5,7 @@ import { DB } from '../services/db.service.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { money, num } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, BIZ={}, CFG={}, SALES=[], selId='';
 const DEF={tipo:'X',puntoVenta:'0001',nextNumber:1,condicionIva:'Monotributo',discriminaIva:false,ivaPct:21,
@@ -24,7 +25,6 @@ async function load(){
   SALES=(await DB.list('sales')).filter(s=>s.status!=='anulada').sort((a,b)=>b.at-a.at).slice(0,50);
   selId=SALES[0]?.id||'';
 }
-function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function current(){
   const s=SALES.find(x=>x.id===selId);
   if(s) return s;

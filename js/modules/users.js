@@ -8,6 +8,7 @@ import { openModal } from '../utils/modal.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { validateForm, V } from '../utils/validate.js';
 import { Audit } from '../services/audit.service.js';
+import { esc } from '../utils/escape.js';
 
 let USER,USERS=[];
 (async()=>{
@@ -27,8 +28,8 @@ function paint(){
   const host=document.getElementById('host');
   host.innerHTML=`<div class="table-wrap"><table class="tbl"><thead><tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Creado</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead><tbody>
     ${USERS.map(u=>`<tr>
-      <td><b>${u.name}</b></td><td class="text-muted">${u.email}</td>
-      <td><span class="badge badge-info">${ROLES[u.role]?.label||u.role}</span></td>
+      <td><b>${esc(u.name)}</b></td><td class="text-muted">${esc(u.email)}</td>
+      <td><span class="badge badge-info">${esc(ROLES[u.role]?.label||u.role)}</span></td>
       <td style="font-size:12px">${fdatetime(u.createdAt)}</td>
       <td style="font-size:12px">${fdatetime(u.lastLogin)}</td>
       <td>${u.active===false?'<span class="badge badge-neutral">Inactivo</span>':'<span class="badge badge-success">Activo</span>'}</td>
@@ -44,11 +45,11 @@ function paint(){
 }
 function openForm(u){
   const isEdit=!!u; const f=document.createElement('form');
-  f.innerHTML=`<div class="field"><label>Nombre *</label><input class="input" name="name" value="${u?.name||''}"><div class="err-msg"></div></div>
-    <div class="field"><label>Email *</label><input class="input" name="email" value="${u?.email||''}" ${isEdit?'disabled':''}><div class="err-msg"></div></div>
+  f.innerHTML=`<div class="field"><label>Nombre *</label><input class="input" name="name" value="${esc(u?.name||'')}"><div class="err-msg"></div></div>
+    <div class="field"><label>Email *</label><input class="input" name="email" value="${esc(u?.email||'')}" ${isEdit?'disabled':''}><div class="err-msg"></div></div>
     ${isEdit?'':'<div class="field"><label>Contraseña *</label><input class="input" name="password" type="password"><div class="err-msg"></div></div>'}
     <div class="field"><label>Rol</label><select class="select" name="role">
-      ${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${u&&u.role===k?'selected':''}>${v.label}</option>`).join('')}</select></div>`;
+      ${Object.entries(ROLES).map(([k,v])=>`<option value="${esc(k)}" ${u&&u.role===k?'selected':''}>${esc(v.label)}</option>`).join('')}</select></div>`;
   const save=document.createElement('button'); save.className='btn btn-primary'; save.textContent=isEdit?'Guardar':'Crear';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
   const m=openModal({title:isEdit?'Editar usuario':'Nuevo usuario',body:f,footer:[cancel,save],width:460}); cancel.onclick=m.close;

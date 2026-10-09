@@ -5,6 +5,7 @@ import { DB } from '../services/db.service.js';
 import { openModal } from '../utils/modal.js';
 import { ok, err } from '../utils/toast.js';
 import { fdatetime } from '../utils/format.js';
+import { esc as escH } from '../utils/escape.js';
 
 let USER, LOGS=[], q='', from='', to='', act='';
 (async()=>{
@@ -39,8 +40,8 @@ function render(view){
   view.innerHTML=`<div class="page-head"><div><h1>Auditoría</h1><p>Registro de acciones del sistema</p></div>
     <button class="btn btn-ghost" id="btnCsv">⬇️ Exportar (CSV)</button></div>
     <div class="card card-pad flex gap-12" style="flex-wrap:wrap;align-items:flex-end">
-      <div class="field" style="margin:0"><label>Buscar</label><input class="input" id="q" placeholder="Usuario, acción o entidad" value="${q}"></div>
-      <div class="field" style="margin:0"><label>Acción</label><select class="select" id="act"><option value="">Todas</option>${acts.map(a=>`<option value="${a}" ${act===a?'selected':''}>${labelAct(a)}</option>`).join('')}</select></div>
+      <div class="field" style="margin:0"><label>Buscar</label><input class="input" id="q" placeholder="Usuario, acción o entidad" value="${escH(q)}"></div>
+      <div class="field" style="margin:0"><label>Acción</label><select class="select" id="act"><option value="">Todas</option>${acts.map(a=>`<option value="${escH(a)}" ${act===a?'selected':''}>${escH(labelAct(a))}</option>`).join('')}</select></div>
       <div class="field" style="margin:0"><label>Desde</label><input class="input" id="from" type="date" value="${from}"></div>
       <div class="field" style="margin:0"><label>Hasta</label><input class="input" id="to" type="date" value="${to}"></div>
       <button class="btn btn-ghost" id="clear">Limpiar</button></div>
@@ -60,8 +61,8 @@ function paint(){
   document.getElementById('sum').innerHTML=`<span class="chip">${rows.length} registro${rows.length===1?'':'s'}</span>`;
   document.getElementById('host').innerHTML=`<div class="card"><table class="table">
     <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Entidad</th><th></th></tr></thead>
-    <tbody>${rows.slice(0,500).map((l,i)=>`<tr><td>${fdatetime(l.at)}</td><td>${l.userName||'sistema'}${l.userEmail?`<br><span style="font-size:11px;color:var(--text-3)">${l.userEmail}</span>`:''}</td>
-      <td><span class="chip">${labelAct(l.action)}</span></td><td>${l.entity||'—'}</td>
+    <tbody>${rows.slice(0,500).map((l,i)=>`<tr><td>${fdatetime(l.at)}</td><td>${escH(l.userName||'sistema')}${l.userEmail?`<br><span style="font-size:11px;color:var(--text-3)">${escH(l.userEmail)}</span>`:''}</td>
+      <td><span class="chip">${escH(labelAct(l.action))}</span></td><td>${escH(l.entity||'—')}</td>
       <td class="ta-right"><button class="btn btn-sm btn-ghost" data-i="${i}">👁 Detalle</button></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Sin registros en el período</td></tr>'}</tbody></table></div>`;
   const shown=rows.slice(0,500);
   document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>detail(shown[+b.dataset.i]));
@@ -71,10 +72,10 @@ function detail(l){
   const box=document.createElement('div');
   box.innerHTML=`<div style="font-size:14px;line-height:2">
     <div class="flex justify-between"><span style="color:var(--text-3)">Fecha</span><b>${fdatetime(l.at)}</b></div>
-    <div class="flex justify-between"><span style="color:var(--text-3)">Usuario</span><b>${l.userName||'sistema'}</b></div>
-    <div class="flex justify-between"><span style="color:var(--text-3)">Email</span><b>${l.userEmail||'—'}</b></div>
-    <div class="flex justify-between"><span style="color:var(--text-3)">Acción</span><b>${labelAct(l.action)}</b></div>
-    <div class="flex justify-between"><span style="color:var(--text-3)">Entidad</span><b>${l.entity||'—'}</b></div></div>
+    <div class="flex justify-between"><span style="color:var(--text-3)">Usuario</span><b>${escH(l.userName||'sistema')}</b></div>
+    <div class="flex justify-between"><span style="color:var(--text-3)">Email</span><b>${escH(l.userEmail||'—')}</b></div>
+    <div class="flex justify-between"><span style="color:var(--text-3)">Acción</span><b>${escH(labelAct(l.action))}</b></div>
+    <div class="flex justify-between"><span style="color:var(--text-3)">Entidad</span><b>${escH(l.entity||'—')}</b></div></div>
     <div class="mt-16"><b style="font-size:13px">Detalle</b>
     <pre style="background:var(--surface-2);border-radius:10px;padding:12px;margin-top:6px;font-size:12px;overflow:auto;max-height:260px;white-space:pre-wrap">${escapeHtml(JSON.stringify(l.detail||{},null,2))}</pre></div>`;
   const close=document.createElement('button'); close.className='btn btn-ghost'; close.textContent='Cerrar';

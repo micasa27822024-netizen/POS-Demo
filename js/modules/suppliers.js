@@ -8,6 +8,7 @@ import { validateForm, V } from '../utils/validate.js';
 import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
 import { money, fdatetime } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, LIST=[], PURCH=[], q='';
 (async()=>{
@@ -34,8 +35,8 @@ function paint(){
   document.getElementById('host').innerHTML=`<div class="card"><table class="table">
     <thead><tr><th>Proveedor</th><th>CUIT</th><th>Teléfono</th><th class="ta-right">Compras</th><th class="ta-right">Deuda</th><th></th></tr></thead>
     <tbody>${rows.map(x=>{const d=deuda(x.id); const n=PURCH.filter(p=>p.supplierId===x.id).length;
-      return `<tr><td><b>${name(x)}</b><br><span style="font-size:11px;color:var(--text-3)">${x.legalName||''}</span></td>
-      <td>${x.cuit||'—'}</td><td>${x.phone||'—'}</td><td class="ta-right">${n}</td>
+      return `<tr><td><b>${esc(name(x))}</b><br><span style="font-size:11px;color:var(--text-3)">${esc(x.legalName||'')}</span></td>
+      <td>${esc(x.cuit||'—')}</td><td>${esc(x.phone||'—')}</td><td class="ta-right">${n}</td>
       <td class="ta-right" style="color:${d>0?'var(--danger)':'var(--text-2)'};font-weight:700">${money(d)}</td>
       <td class="ta-right"><div class="flex gap-8 justify-end">
         <button class="btn btn-sm btn-ghost" data-ed="${x.id}" title="Editar">✏️</button>
@@ -51,14 +52,14 @@ function paint(){
 function openForm(x){
   const f=document.createElement('form');
   f.innerHTML=`<div class="grid grid-2">
-    <div class="field"><label>Nombre comercial *</label><input class="input" name="tradeName" value="${x?.tradeName||''}"><div class="err-msg"></div></div>
-    <div class="field"><label>Razón social</label><input class="input" name="legalName" value="${x?.legalName||''}"></div>
-    <div class="field"><label>CUIT</label><input class="input" name="cuit" value="${x?.cuit||''}"></div>
-    <div class="field"><label>Teléfono</label><input class="input" name="phone" value="${x?.phone||''}"></div>
-    <div class="field"><label>Email</label><input class="input" name="email" value="${x?.email||''}"><div class="err-msg"></div></div>
-    <div class="field"><label>Dirección</label><input class="input" name="address" value="${x?.address||''}"></div>
-    <div class="field"><label>Ciudad</label><input class="input" name="city" value="${x?.city||''}"></div>
-    <div class="field"><label>Provincia</label><input class="input" name="province" value="${x?.province||''}"></div>
+    <div class="field"><label>Nombre comercial *</label><input class="input" name="tradeName" value="${esc(x?.tradeName||'')}"><div class="err-msg"></div></div>
+    <div class="field"><label>Razón social</label><input class="input" name="legalName" value="${esc(x?.legalName||'')}"></div>
+    <div class="field"><label>CUIT</label><input class="input" name="cuit" value="${esc(x?.cuit||'')}"></div>
+    <div class="field"><label>Teléfono</label><input class="input" name="phone" value="${esc(x?.phone||'')}"></div>
+    <div class="field"><label>Email</label><input class="input" name="email" value="${esc(x?.email||'')}"><div class="err-msg"></div></div>
+    <div class="field"><label>Dirección</label><input class="input" name="address" value="${esc(x?.address||'')}"></div>
+    <div class="field"><label>Ciudad</label><input class="input" name="city" value="${esc(x?.city||'')}"></div>
+    <div class="field"><label>Provincia</label><input class="input" name="province" value="${esc(x?.province||'')}"></div>
   </div>`;
   const save=document.createElement('button'); save.className='btn btn-primary'; save.textContent=x?'Guardar':'Crear';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';

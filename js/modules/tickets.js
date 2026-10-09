@@ -6,6 +6,7 @@ import { Storage } from '../services/storage.service.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { money } from '../utils/format.js';
+import { esc } from '../utils/escape.js';
 
 let USER, BIZ={}, CFG={};
 const DEF={paper:'80',showLogo:false,logo:'',headerExtra:'',showCuit:true,showAddress:true,showPhone:true,
@@ -33,7 +34,7 @@ const PM={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:
 function ticketHtml(s){
   const fs=CFG.fontSize||12.5;
   const qr=CFG.showQr?`<div style="text-align:center;margin-top:10px"><img alt="QR" style="width:88px;height:88px" src="https://api.qrserver.com/v1/create-qr-code/?size=88x88&data=${encodeURIComponent(CFG.qrText||('Ticket '+s.number))}"></div>`:'';
-  const logo=CFG.showLogo&&CFG.logo?`<div style="text-align:center;margin-bottom:6px"><img alt="logo" style="max-width:120px;max-height:70px" src="${CFG.logo}"></div>`:'';
+  const logo=CFG.showLogo&&CFG.logo?`<div style="text-align:center;margin-bottom:6px"><img alt="logo" style="max-width:120px;max-height:70px" src="${esc(CFG.logo)}"></div>`:'';
   return `<div style="font-family:'Courier New',monospace;font-size:${fs}px;background:#fff;color:#000;padding:14px;line-height:1.45">
     ${logo}
     <div style="text-align:center"><b style="font-size:${+fs+2}px">${esc(BIZ.name||'Comercio')}</b><br>
@@ -58,7 +59,6 @@ function ticketHtml(s){
     ${qr}
   </div>`;
 }
-function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 function render(view){
   view.innerHTML=`<div class="page-head"><div><h1>Diseñador de Tickets</h1><p>Personalizá el comprobante interno de venta</p></div>
@@ -79,7 +79,7 @@ function render(view){
         <label class="ck"><input type="checkbox" id="showLogo" ${CFG.showLogo?'checked':''}> Mostrar logo</label>
         <div class="field" id="logoBox" style="${CFG.showLogo?'':'display:none'}"><label>Logo (se comprime automáticamente)</label>
           <input class="input" id="logo" type="file" accept="image/*">
-          ${CFG.logo?`<div class="mt-8"><img src="${CFG.logo}" style="max-height:60px"> <button class="btn btn-sm btn-ghost" id="delLogo">Quitar</button></div>`:''}</div>
+          ${CFG.logo?`<div class="mt-8"><img src="${esc(CFG.logo)}" style="max-height:60px"> <button class="btn btn-sm btn-ghost" id="delLogo">Quitar</button></div>`:''}</div>
         <label class="ck"><input type="checkbox" id="showQr" ${CFG.showQr?'checked':''}> Mostrar código QR</label>
         <div class="field" id="qrBox" style="${CFG.showQr?'':'display:none'}"><label>Contenido del QR (URL o texto)</label><input class="input" id="qrText" value="${esc(CFG.qrText)}" placeholder="https://micomercio.com"></div>
       </div>

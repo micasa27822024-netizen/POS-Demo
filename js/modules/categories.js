@@ -5,6 +5,7 @@ import { openModal, confirmDialog } from '../utils/modal.js';
 import { ok, err, warn } from '../utils/toast.js';
 import { validateForm, V } from '../utils/validate.js';
 import { Audit } from '../services/audit.service.js';
+import { esc } from '../utils/escape.js';
 
 let USER,CATS=[],SUBS=[],PRODUCTS=[];
 (async()=>{
@@ -27,11 +28,11 @@ function paint(){
   const host=document.getElementById('host');
   host.innerHTML=CATS.map(c=>{const subs=SUBS.filter(s=>s.categoryId===c.id);
     return `<div class="card card-pad"><div class="flex justify-between items-center">
-      <div class="flex items-center gap-12"><span style="width:34px;height:34px;border-radius:9px;background:${c.color||'#64748b'}"></span>
-        <div><b>${c.name}</b><br><span style="font-size:11px;color:var(--text-3)">${countProd(c.id)} productos</span></div></div>
-      <div class="flex gap-8"><button class="btn btn-sm btn-ghost" data-ec="${c.id}">✏️</button>
-        <button class="btn btn-sm btn-ghost" data-dc="${c.id}">🗑️</button></div></div>
-      ${subs.length?`<div class="mt-8 flex gap-8" style="flex-wrap:wrap">${subs.map(s=>`<span class="chip" data-ds="${s.id}" title="Clic para eliminar">${s.name} ✕</span>`).join('')}</div>`:''}
+      <div class="flex items-center gap-12"><span style="width:34px;height:34px;border-radius:9px;background:${esc(c.color||'#64748b')}"></span>
+        <div><b>${esc(c.name)}</b><br><span style="font-size:11px;color:var(--text-3)">${countProd(c.id)} productos</span></div></div>
+      <div class="flex gap-8"><button class="btn btn-sm btn-ghost" data-ec="${esc(c.id)}">✏️</button>
+        <button class="btn btn-sm btn-ghost" data-dc="${esc(c.id)}">🗑️</button></div></div>
+      ${subs.length?`<div class="mt-8 flex gap-8" style="flex-wrap:wrap">${subs.map(s=>`<span class="chip" data-ds="${esc(s.id)}" title="Clic para eliminar">${esc(s.name)} ✕</span>`).join('')}</div>`:''}
     </div>`;}).join('')||'<div class="empty">Sin categorías</div>';
   host.querySelectorAll('[data-ec]').forEach(b=>b.onclick=()=>openCat(CATS.find(c=>c.id===b.dataset.ec)));
   host.querySelectorAll('[data-dc]').forEach(b=>b.onclick=async()=>{const c=CATS.find(x=>x.id===b.dataset.dc);
@@ -44,8 +45,8 @@ function paint(){
 }
 function openCat(c){
   const f=document.createElement('form');
-  f.innerHTML=`<div class="field"><label>Nombre *</label><input class="input" name="name" value="${c?.name||''}"><div class="err-msg"></div></div>
-    <div class="field"><label>Color</label><input class="input" name="color" type="color" value="${c?.color||'#4f46e5'}" style="height:44px;padding:4px"></div>`;
+  f.innerHTML=`<div class="field"><label>Nombre *</label><input class="input" name="name" value="${esc(c?.name||'')}"><div class="err-msg"></div></div>
+    <div class="field"><label>Color</label><input class="input" name="color" type="color" value="${esc(c?.color||'#4f46e5')}" style="height:44px;padding:4px"></div>`;
   const save=document.createElement('button'); save.className='btn btn-primary'; save.textContent=c?'Guardar':'Crear';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
   const m=openModal({title:c?'Editar categoría':'Nueva categoría',body:f,footer:[cancel,save],width:420}); cancel.onclick=m.close;
@@ -58,7 +59,7 @@ function openCat(c){
 function openSub(){
   if(!CATS.length) return warn('Primero creá una categoría');
   const f=document.createElement('form');
-  f.innerHTML=`<div class="field"><label>Categoría</label><select class="select" name="categoryId">${CATS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+  f.innerHTML=`<div class="field"><label>Categoría</label><select class="select" name="categoryId">${CATS.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></div>
     <div class="field"><label>Nombre subcategoría *</label><input class="input" name="name"><div class="err-msg"></div></div>`;
   const save=document.createElement('button'); save.className='btn btn-primary'; save.textContent='Crear';
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';

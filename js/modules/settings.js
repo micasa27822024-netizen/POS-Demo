@@ -8,6 +8,7 @@ import { Audit } from '../services/audit.service.js';
 import { money, setCurrency } from '../utils/format.js';
 import { PAYMENT_METHODS } from '../services/sales.service.js';
 import { toggleTheme, currentTheme } from '../utils/theme.js';
+import { esc } from '../utils/escape.js';
 
 let USER, BIZ={}, maxNumber=1000, tab='negocio';
 const DEFCUR={symbol:'$',code:'ARS',locale:'es-AR',decimals:2};
@@ -25,7 +26,6 @@ async function load(){
   maxNumber=sales.reduce((m,s)=>Math.max(m,s.number||0),0);
   setCurrency(BIZ.currency);
 }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function render(view){
   const tabs=[['negocio','🏪 Negocio'],['moneda','💱 Moneda e impuestos'],['numeracion','🔢 Numeración'],['pagos','💳 Medios de pago'],['apariencia','🎨 Apariencia']];
@@ -57,7 +57,7 @@ function negocio(){
     <div class="flex gap-12"><div style="flex:1">${field('phone','Teléfono',BIZ.phone||'')}</div>
       <div style="flex:1">${field('email','Email',BIZ.email||'','email')}</div></div>
     <div class="field"><label>Logo del negocio</label><input class="input" id="logo" type="file" accept="image/*">
-      ${BIZ.logo?`<div class="mt-8"><img src="${BIZ.logo}" style="max-height:64px"> <button class="btn btn-sm btn-ghost" id="delLogo">Quitar</button></div>`:''}</div></div>`;
+      ${BIZ.logo?`<div class="mt-8"><img src="${esc(BIZ.logo)}" style="max-height:64px"> <button class="btn btn-sm btn-ghost" id="delLogo">Quitar</button></div>`:''}</div></div>`;
 }
 function moneda(){
   const c=BIZ.currency||DEFCUR;
