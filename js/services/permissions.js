@@ -16,7 +16,7 @@ export const ACCESS={
 // Capacidades finas para operaciones críticas.
 export const CAPS={
   admin:['*'],
-  encargado:['product.edit','product.delete','price.edit','sale.void','purchase.create','stock.adjust','cash.open','cash.close','discount.apply'],
+  encargado:['product.edit','product.delete','price.edit','sale.void','sale.return','purchase.create','stock.adjust','cash.open','cash.close','discount.apply'],
   cajero:['sale.create','cash.open','cash.close','client.create','discount.apply']
 };
 

@@ -1,6 +1,10 @@
 // Lógica de productos: CRUD, cálculo de margen y movimientos de stock.
 import { DB } from './db.service.js';
 import { Audit } from './audit.service.js';
+import { assertUnique, isUnique } from '../utils/unique.js';
+// B3: el cálculo de margen vive en un módulo PURO testeable con node --test.
+import { margin } from './product-calc.js';
+export { margin };
 
 export const UNITS=[
   {v:'unidad',l:'Unidad'},{v:'kg',l:'Kilogramo (kg)'},{v:'g',l:'Gramo (g)'},
@@ -8,23 +12,20 @@ export const UNITS=[
   {v:'caja',l:'Caja'},{v:'pack',l:'Pack'},{v:'docena',l:'Docena'},{v:'otro',l:'Otra'}
 ];
 
-export function margin(cost,price){
-  cost=Number(cost)||0; price=Number(price)||0;
-  const profit=price-cost;
-  const marginPct=price>0?(profit/price)*100:0;   // margen sobre venta
-  const markupPct=cost>0?(profit/cost)*100:0;      // ganancia sobre costo
-  return {profit,marginPct,markupPct};
-}
-
 export const Products={
   list:(opts)=>DB.list('products',opts),
   get:(id)=>DB.get('products',id),
   async create(data){
+    // Unicidad de código interno y código de barras (si vienen cargados).
+    await assertUnique('products','code',data.code,null,'El código interno');
+    await assertUnique('products','barcode',data.barcode,null,'El código de barras');
     const doc=await DB.add('products',{...data,createdAt:Date.now(),updatedAt:Date.now()});
     await Audit.log('create','product',{id:doc.id,name:doc.name});
     return doc;
   },
   async update(id,patch){
+    if('code' in patch)    await assertUnique('products','code',patch.code,id,'El código interno');
+    if('barcode' in patch) await assertUnique('products','barcode',patch.barcode,id,'El código de barras');
     const doc=await DB.update('products',id,{...patch,updatedAt:Date.now()});
     await Audit.log('update','product',{id,fields:Object.keys(patch)});
     return doc;
@@ -36,7 +37,11 @@ export const Products={
   async duplicate(id){
     const p=await DB.get('products',id); if(!p) return;
     const {id:_,...rest}=p;
-    return this.create({...rest,name:rest.name+' (copia)',code:(rest.code||'')+'-C',barcode:''});
+    // Genera un código único: base-C, base-C2, base-C3… (evita choques).
+    const base=(rest.code||'')+'-C';
+    let code=base, n=1;
+    while(code && !(await isUnique('products','code',code))){ n++; code=base+n; }
+    return this.create({...rest,name:rest.name+' (copia)',code,barcode:''});
   },
   // Registra un movimiento de stock y actualiza el stock del producto.
   // A3: atómico con increment. Si recibe `tx`, opera dentro de esa transacción;

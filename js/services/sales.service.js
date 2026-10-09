@@ -3,6 +3,9 @@
 import { DB } from './db.service.js';
 import { Products } from './products.service.js';
 import { Audit } from './audit.service.js';
+// B3: la lógica de cálculo vive en un módulo PURO testeable con node --test.
+import { calcTotals, DECIMAL_UNITS, isDecimalUnit } from './sales-calc.js';
+export { calcTotals, DECIMAL_UNITS, isDecimalUnit };
 
 export const PAYMENT_METHODS=[
   {v:'efectivo',l:'Efectivo',ic:'💵'},
@@ -12,29 +15,6 @@ export const PAYMENT_METHODS=[
   {v:'cuenta_corriente',l:'Cuenta corriente',ic:'🧧'},
   {v:'otros',l:'Otros',ic:'•'}
 ];
-
-// Unidades que admiten cantidades decimales.
-export const DECIMAL_UNITS=['kg','g','litro','ml','metro'];
-export const isDecimalUnit=u=>DECIMAL_UNITS.includes(u);
-
-// Calcula totales de un carrito. items:[{qty,price,cost,discount}]
-export function calcTotals(items,generalDiscount=0){
-  let subtotal=0, cost=0, itemDisc=0;
-  for(const it of items){
-    const gross=it.price*it.qty;
-    const d=it.discount||0;
-    subtotal+=gross; itemDisc+=d; cost+=(it.cost||0)*it.qty;
-  }
-  const afterItem=subtotal-itemDisc;
-  const gDisc=Math.min(generalDiscount||0,afterItem);
-  const total=+(afterItem-gDisc).toFixed(2);
-  const totalCost=+cost.toFixed(2);
-  return {
-    subtotal:+subtotal.toFixed(2), itemDiscount:+itemDisc.toFixed(2),
-    generalDiscount:+gDisc.toFixed(2), total, cost:totalCost,
-    profit:+(total-totalCost).toFixed(2)
-  };
-}
 
 export const Sales={
   list:(opts)=>DB.list('sales',opts),
@@ -60,15 +40,19 @@ export const Sales={
 
     const biz=await DB.get('settings','business').catch(()=>null);
     const allowNeg=!!(biz&&biz.allowNegativeStock);
+    const requireOpenCash = biz ? biz.requireOpenCash!==false : true; // B2: por defecto true
     const numberStart=(biz&&parseInt(biz.numberStart,10))||1000;
     const cashApplied=payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+(+p.amount||0),0);
 
-    // Caja abierta del usuario (consulta FUERA de la transacción: Firestore no
-    // admite queries dentro de runTransaction). B2 refina la obligatoriedad.
+    // B2: la venta en efectivo se asocia a la caja abierta DEL usuario (openedBy),
+    // sin caer en la caja de otro. Consulta FUERA de la transacción (Firestore no
+    // admite queries dentro de runTransaction).
     let openCash=null;
     if(cashApplied>0){
       const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
-      openCash=regs.find(r=>r.openedBy===user.id)||regs[0]||null;
+      openCash=regs.find(r=>r.openedBy===user.id)||null;
+      if(requireOpenCash && !openCash)
+        throw new Error('No tenés una caja abierta. Abrí la caja para cobrar en efectivo.');
     }
 
     return DB.transaction(async(tx)=>{
@@ -110,11 +94,122 @@ export const Sales={
         tx.update('clients',clientId,{balance:DB.increment(ccAmount),updatedAt:Date.now()});
         tx.add('accountsReceivable',{clientId,type:'debito',amount:ccAmount,balance:newBalance,
           concept:'Venta #'+number,saleId,userId:user.id,at:Date.now()}); }
+      // B1: resumen diario incremental (dashboard/reportes leen esto, no la colección completa).
+      const dayKey=new Date().toISOString().slice(0,10);
+      const dsPatch={date:dayKey,salesCount:DB.increment(1),total:DB.increment(t.total),
+        cost:DB.increment(t.cost),profit:DB.increment(t.profit)};
+      for(const p of payments){ dsPatch['pm_'+p.method]=DB.increment(+p.amount||0); }
+      tx.set('dailyStats',dayKey,dsPatch);
       const sale={id:saleId,number,items,...t,discount:t.itemDiscount+t.generalDiscount,
         clientId:clientId||null,userId:user.id,userName:user.name,status:'completada',at:Date.now()};
       // Auditoría: mejor esfuerzo, fuera del camino crítico de la transacción.
       Audit.log('sale','sale',{id:saleId,number,total:t.total});
       return sale;
+    });
+  },
+
+  // C3: DEVOLUCIONES PARCIALES. Permite devolver una parte de los ítems de una
+  // venta ya realizada. Es ATÓMICA e idempotente respecto de lo ya devuelto:
+  // lee las devoluciones previas (colección `returns`), valida que la cantidad
+  // a devolver no supere lo vendido menos lo ya devuelto, repone stock, reintegra
+  // el dinero (efectivo en caja o crédito en cuenta corriente) y descuenta del
+  // resumen diario (dailyStats) de HOY.
+  // params: { saleId, lines:[{productId, qty}], method:'efectivo'|'cuenta_corriente',
+  //           reason, user }
+  async returnItems({saleId,lines,method='efectivo',reason='',user}){
+    if(!saleId) throw new Error('Venta no indicada');
+    if(!lines||!lines.length) throw new Error('No seleccionaste ítems para devolver');
+    if(!reason||!reason.trim()) throw new Error('Ingresá un motivo de devolución');
+
+    const sale=await DB.get('sales',saleId);
+    if(!sale) throw new Error('La venta no existe');
+    if(sale.status==='anulada') throw new Error('La venta está anulada: no admite devoluciones');
+
+    // Lo ya devuelto por producto (suma de devoluciones previas).
+    const prevReturns=await DB.list('returns',{where:[['saleId','==',saleId]]}).catch(()=>[]);
+    const returnedSoFar={};
+    for(const r of prevReturns){ for(const l of (r.lines||[])){
+      returnedSoFar[l.productId]=(returnedSoFar[l.productId]||0)+(+l.qty||0); } }
+
+    // Validación contra lo vendido y armado de líneas con importes.
+    const afterItem=(+sale.subtotal||0)-(+sale.itemDiscount||0); // base para prorratear descuento general
+    const gDisc=+sale.generalDiscount||0;
+    const detail=[];
+    let refundTotal=0, costTotal=0;
+    for(const req of lines){
+      const q=+req.qty||0; if(q<=0) continue;
+      const it=(sale.items||[]).find(x=>x.productId===req.productId);
+      if(!it) throw new Error('Un ítem no pertenece a la venta');
+      const sold=+it.qty||0;
+      const already=returnedSoFar[req.productId]||0;
+      const avail=+(sold-already).toFixed(3);
+      if(q>avail+0.0001) throw new Error('No podés devolver '+q+' de «'+it.name+'»: disponible '+avail);
+      const grossLine=(+it.price||0)*q;
+      const itemDiscLine=sold>0?(+it.discount||0)*(q/sold):0;
+      const netBeforeGeneral=grossLine-itemDiscLine;
+      const generalShare=afterItem>0?gDisc*(netBeforeGeneral/afterItem):0;
+      const refundLine=+(netBeforeGeneral-generalShare).toFixed(2);
+      const costLine=+((+it.cost||0)*q).toFixed(2);
+      refundTotal+=refundLine; costTotal+=costLine;
+      detail.push({productId:req.productId,name:it.name,unit:it.unit||'',qty:q,refund:refundLine,cost:costLine});
+    }
+    if(!detail.length) throw new Error('No hay cantidades válidas para devolver');
+    refundTotal=+refundTotal.toFixed(2); costTotal=+costTotal.toFixed(2);
+    const profitTotal=+(refundTotal-costTotal).toFixed(2);
+
+    if(method==='cuenta_corriente' && !sale.clientId)
+      throw new Error('La venta no tiene cliente: no se puede acreditar en cuenta corriente');
+
+    // Caja abierta del usuario (consulta fuera de la transacción) para reintegro en efectivo.
+    let openCash=null;
+    if(method==='efectivo'){
+      const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
+      openCash=regs.find(r=>r.openedBy===user.id)||regs[0]||null;
+    }
+
+    return DB.transaction(async(tx)=>{
+      // LECTURAS
+      const s=await tx.get('sales',saleId);
+      if(!s) throw new Error('La venta ya no existe');
+      if(s.status==='anulada') throw new Error('La venta está anulada');
+      const prod={}; for(const d of detail){ prod[d.productId]=await tx.get('products',d.productId); }
+      const cli=(method==='cuenta_corriente'&&s.clientId)?await tx.get('clients',s.clientId):null;
+      // ESCRITURAS
+      const retId=tx.add('returns',{saleId,number:s.number,clientId:s.clientId||null,
+        lines:detail,refundTotal,cost:costTotal,profit:profitTotal,method,reason:reason.trim(),
+        userId:user.id,userName:user.name,at:Date.now()});
+      for(const d of detail){ const p=prod[d.productId];
+        const newStock=+(((p&&+p.stock)||0)+d.qty).toFixed(3);
+        tx.update('products',d.productId,{stock:DB.increment(d.qty),updatedAt:Date.now()});
+        tx.add('stockMovements',{productId:d.productId,productName:(p&&p.name)||d.name,type:'devolucion',
+          qty:d.qty,delta:d.qty,stockAfter:newStock,reason:'Devolución venta #'+s.number,
+          userId:user.id,userName:user.name,refId:saleId,at:Date.now()});
+      }
+      // Reintegro del dinero.
+      if(method==='efectivo'){
+        tx.add('cashMovements',{registerId:openCash?openCash.id:null,sinCaja:!openCash,type:'egreso',
+          amount:refundTotal,concept:'Devolución venta #'+s.number,saleId,userId:user.id,at:Date.now()});
+      }else if(method==='cuenta_corriente' && s.clientId){
+        const nb=+(((cli&&+cli.balance)||0)-refundTotal).toFixed(2);
+        tx.update('clients',s.clientId,{balance:DB.increment(-refundTotal),updatedAt:Date.now()});
+        tx.add('accountsReceivable',{clientId:s.clientId,type:'credito',amount:refundTotal,balance:nb,
+          concept:'Devolución venta #'+s.number,saleId,userId:user.id,at:Date.now()});
+      }
+      // Marca en la venta cuánto se devolvió (acumulado) y su estado.
+      const retMap={...(s.returnedQty||{})};
+      for(const d of detail){ retMap[d.productId]=(+retMap[d.productId]||0)+d.qty; }
+      const fullyReturned=(s.items||[]).every(it=>(+retMap[it.productId]||0)+0.0001>=(+it.qty||0));
+      tx.update('sales',saleId,{returnedQty:retMap,
+        returnedTotal:+(((+s.returnedTotal)||0)+refundTotal).toFixed(2),
+        status:fullyReturned?'devuelta':'parcial_devuelta',updatedAt:Date.now()});
+      // dailyStats de HOY: suma devoluciones y resta de los netos del día.
+      const dayKey=new Date().toISOString().slice(0,10);
+      const dsPatch={date:dayKey,returnsCount:DB.increment(1),returnsTotal:DB.increment(refundTotal),
+        total:DB.increment(-refundTotal),cost:DB.increment(-costTotal),profit:DB.increment(-profitTotal)};
+      dsPatch['pm_'+method]=DB.increment(-refundTotal);
+      tx.set('dailyStats',dayKey,dsPatch);
+      Audit.log('sale.return','sale',{id:saleId,number:s.number,refund:refundTotal,reason:reason.trim()});
+      return {id:retId,saleId,number:s.number,refundTotal,lines:detail};
     });
   }
 };

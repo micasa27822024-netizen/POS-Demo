@@ -3,7 +3,7 @@
 import { db, fb, DEMO_MODE } from './firebase.js';
 import { demoStore } from './demo-store.js';
 
-function applyFilters(arr,{where:w,orderBy:ob,limit:lim}={}){
+function applyFilters(arr,{where:w,orderBy:ob,limit:lim,startAfter:sa}={}){
   let r=arr;
   if(w) for(const [f,op,v] of w){
     r=r.filter(x=>{const val=x[f];
@@ -12,8 +12,14 @@ function applyFilters(arr,{where:w,orderBy:ob,limit:lim}={}){
         case 'in':return Array.isArray(v)&&v.includes(val);
         case 'array-contains':return Array.isArray(val)&&val.includes(v);default:return true;}});
   }
-  if(ob){const [f,dir='asc']=Array.isArray(ob)?ob:[ob];
+  let obField=null,obDir='asc';
+  if(ob){const [f,dir='asc']=Array.isArray(ob)?ob:[ob]; obField=f; obDir=dir;
     r=[...r].sort((a,b)=>{const av=a[f],bv=b[f];if(av<bv)return dir==='desc'?1:-1;if(av>bv)return dir==='desc'?-1:1;return 0;});}
+  // Paginación demo (B1): startAfter es el valor del campo ordenado del último item.
+  if(sa!=null && obField){
+    const idx=r.findIndex(x=>x[obField]===sa);
+    if(idx>=0) r=r.slice(idx+1);
+  }
   if(lim) r=r.slice(0,lim);
   return r;
 }

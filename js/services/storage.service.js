@@ -5,7 +5,8 @@
 // Firestore permite hasta ~1 MB por documento. Comprimiendo a ~500 px y
 // calidad 0,7 cada foto ocupa ~30-70 KB, muy por debajo del límite.
 
-const MAX_BYTES = 700 * 1024; // tope de seguridad para el dataURL (base64)
+const MAX_BYTES = 100 * 1024; // tope duro del dataURL (base64) ~100 KB
+const TARGET_BYTES = 30 * 1024; // objetivo recomendado por B1 (~30 KB, miniatura)
 
 // Redimensiona y comprime la imagen usando un <canvas> del navegador.
 function renderDataUrl(file, { maxW, maxH, quality }) {
@@ -30,16 +31,17 @@ function renderDataUrl(file, { maxW, maxH, quality }) {
 // Comprime y, si hace falta, reduce más hasta entrar en el tope de Firestore.
 export async function compressImage(file, opts = {}) {
   if (!file || !file.type?.startsWith('image/')) throw new Error('El archivo no es una imagen');
-  let { maxW = 500, maxH = 500, quality = 0.7 } = opts;
+  // B1: las imágenes se guardan como miniatura (ref. 200x200, JPEG 0,7, objetivo <30 KB).
+  let { maxW = 200, maxH = 200, quality = 0.7 } = opts;
   let dataUrl = await renderDataUrl(file, { maxW, maxH, quality });
-  // Si queda muy grande, bajamos calidad y tamaño progresivamente.
+  // Si supera el objetivo, bajamos calidad y tamaño progresivamente.
   let guard = 0;
-  while (dataUrl.length > MAX_BYTES && guard++ < 5) {
-    quality = Math.max(0.4, quality - 0.15);
-    maxW = Math.round(maxW * 0.8); maxH = Math.round(maxH * 0.8);
+  while (dataUrl.length > TARGET_BYTES && guard++ < 6) {
+    quality = Math.max(0.4, quality - 0.1);
+    maxW = Math.round(maxW * 0.85); maxH = Math.round(maxH * 0.85);
     dataUrl = await renderDataUrl(file, { maxW, maxH, quality });
   }
-  if (dataUrl.length > MAX_BYTES) throw new Error('La imagen es demasiado grande, probá con otra más liviana');
+  if (dataUrl.length > MAX_BYTES) throw new Error('La imagen es demasiado grande; probá con una más liviana');
   return dataUrl;
 }
 
