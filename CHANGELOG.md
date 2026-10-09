@@ -2,6 +2,64 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.3] — Tres correcciones menores de la revisión
+
+Ajustes puntuales sobre hallazgos menores. No cambia el alcance funcional.
+
+- **Caja de otro usuario**: devoluciones, anulaciones y compras ya **no** caen
+  por error en la caja de otro cajero cuando el usuario no tiene caja propia
+  abierta. En ese caso el movimiento se registra marcado como "sin caja"
+  (`sinCaja`), nunca sobre la caja ajena.
+- **Unidad de medida**: la unidad del producto ahora se escapa al mostrarse en
+  facturas, tickets y stock (evita que un valor con caracteres raros rompa el
+  formato). Al importar productos por CSV, la unidad se valida contra la lista
+  permitida; si no es válida se usa `unidad` por defecto.
+- **Cuenta de acceso huérfana**: al dar de alta un usuario, si falla el guardado
+  del perfil, se elimina la credencial recién creada para no dejar una cuenta
+  sin perfil (que no podría iniciar sesión ni volver a crearse por email
+  duplicado).
+
+## [1.1.2] — Correcciones de la nueva auditoría (previo al piloto)
+
+Seis fallas detectadas en la revisión y corregidas antes del piloto. No cambia
+el alcance funcional; endurece integridad de datos y consistencia de reportes.
+
+### Integridad de datos
+
+- **Anulación de ventas con devoluciones**: ahora **solo** se puede anular una
+  venta en estado `completada`. Las ventas `devuelta` / `parcial_devuelta`
+  dejan de poder anularse (antes la anulación reponía stock YA repuesto por la
+  devolución, duplicando el ajuste). Validado tanto en el botón como **dentro
+  de la transacción**.
+- **Devoluciones 100% atómicas**: la validación de “lo ya devuelto” se hace
+  **dentro de la transacción** usando `sale.returnedQty` (no una lectura previa
+  de `returns` hecha afuera), evitando devoluciones duplicadas por doble clic o
+  concurrencia. La venta guarda además `returnedProfit` y `returnedCost`.
+- **Día contable en horario de Argentina**: nueva `dayKeyAR()` en `format.js`.
+  Las claves de `dailyStats`, el dashboard y los reportes dejan de calcular el
+  día en **UTC** (`toISOString`), que mandaba las ventas de la noche al día
+  siguiente. Ahora usan el día real local (America/Argentina/Buenos_Aires).
+- **Respaldo completo sin exclusiones**: `buildBackup` se pagina por **ID de
+  documento** (`documentId()`), no por el campo `at`; así no se omiten
+  documentos sin ese campo. Se agregaron al respaldo las colecciones faltantes:
+  `returns`, `users`, `subcategories`.
+
+### Reportes y rendimiento
+
+- **Reportes netos de devoluciones**: facturación, ganancia, ventas por día y
+  por vendedor restan `returnedTotal` / `returnedProfit` de cada venta.
+- **Lecturas acotadas**: Stock (movimientos, `limit` 500 orden desc),
+  Auditoría (`limit` 1000 orden desc) y Dashboard (ventas/productos/clientes/
+  categorías con `limit`) dejan de leer colecciones sin tope.
+
+### Menores
+
+- `Sales.requestFiscal()` **idempotente**: si la venta ya tiene CAE emitido no
+  vuelve a solicitarlo, y un candado atómico (`estado:'solicitando'`) evita
+  pedidos duplicados concurrentes.
+- `package.json` pasa a **1.1.2** (estaba en 1.0.0, desalineado con el
+  changelog).
+
 ## [1.1.1] — C1 (preparación fiscal) + corrección de Productos
 
 ### C1 — Facturación electrónica AFIP/ARCA (preparación sin backend)
