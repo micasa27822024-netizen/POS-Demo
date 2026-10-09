@@ -13,6 +13,9 @@ import { needsRestock } from './stock-flags.js';
 // C1: interfaz de facturación electrónica (preparación sin backend).
 import { Fiscal, fiscalDefault } from './fiscal.service.js';
 export { Fiscal };
+// C1 / punto 4: candado fiscal con vencimiento (lógica PURA testeable).
+import { evaluateFiscalLock, hasFiscalCae, withLock } from './fiscal-lock.js';
+export { FISCAL_LOCK_TTL_MS } from './fiscal-lock.js';
 
 export const PAYMENT_METHODS=[
   {v:'efectivo',l:'Efectivo',ic:'💵'},
@@ -237,28 +240,33 @@ export const Sales={
   // (Fiscal.setProvider) completará tipo, numeración fiscal, CAE y vencimiento.
   // No se hace dentro de una transacción de Firestore: el pedido de CAE requiere
   // red/backend y la venta ya quedó registrada de forma atómica (A3).
-  async requestFiscal(saleId){
+  async requestFiscal(saleId,user=null){
     const sale=await DB.get('sales',saleId);
     if(!sale) throw new Error('La venta no existe');
     if(sale.status==='anulada') throw new Error('La venta está anulada: no se emite comprobante fiscal');
     const f0=sale.fiscal||{};
     // C1 idempotencia: si ya tiene CAE emitido, se devuelve sin volver a solicitar.
-    if(f0.cae && f0.estado!=='no_fiscal' && f0.estado!=='error') return f0;
-    // Candado ATÓMICO: marca 'solicitando' solo si no hay otra solicitud en curso
-    // (evita pedir dos CAE para la misma venta por doble clic o concurrencia).
+    if(hasFiscalCae(f0)) return f0;
+    // Candado ATÓMICO con VENCIMIENTO (punto 4): marca 'solicitando' con sello de
+    // tiempo. Si otra solicitud está en curso y FRESCA (< 2 min) se rechaza; si
+    // quedó trabada (candado vencido) se retoma. Evita pedir dos CAE a la vez y,
+    // a la vez, que una solicitud abandonada deje la venta bloqueada para siempre.
+    let tookOver=false;
     await DB.transaction(async(tx)=>{
       const s=await tx.get('sales',saleId);
       if(!s) throw new Error('La venta ya no existe');
       if(s.status==='anulada') throw new Error('La venta está anulada');
-      const f=s.fiscal||{};
-      if(f.cae && f.estado!=='no_fiscal' && f.estado!=='error') return; // ya emitido
-      if(f.estado==='solicitando') throw new Error('Ya hay una solicitud de CAE en curso para esta venta');
-      tx.update('sales',saleId,{fiscal:{...f,estado:'solicitando'},updatedAt:Date.now()});
+      const ev=evaluateFiscalLock(s.fiscal,Date.now());
+      if(ev.action==='skip') return;              // ya emitido
+      if(ev.action==='blocked') throw new Error(ev.reason);
+      tookOver=!!ev.takeover;
+      tx.update('sales',saleId,{fiscal:withLock(s.fiscal,Date.now(),user&&user.id),updatedAt:Date.now()});
     });
+    if(tookOver) Audit.log('sale.fiscal.retomada','sale',{id:saleId,number:sale.number});
     // Relee por si otra solicitud concurrente ya completó el CAE.
     const cur=await DB.get('sales',saleId);
     const fc=(cur&&cur.fiscal)||{};
-    if(fc.cae && fc.estado!=='no_fiscal' && fc.estado!=='error' && fc.estado!=='solicitando') return fc;
+    if(hasFiscalCae(fc)) return fc;
     const invCfg=await DB.get('settings','invoice').catch(()=>null);
     const cfg={puntoVenta:(invCfg&&invCfg.puntoVenta)||'0001',
       tipoComprobante:(invCfg&&invCfg.tipo)||'X'};
@@ -266,11 +274,14 @@ export const Sales={
     try{
       fiscal=await Fiscal.requestCAE(sale,cfg);
     }catch(ex){
-      // Si falla la red/backend, se libera el candado dejando estado 'error'.
-      await DB.update('sales',saleId,{fiscal:{...f0,estado:'error',error:(ex&&ex.message)||'Error de facturación'},updatedAt:Date.now()});
+      // Si falla la red/backend, se LIBERA el candado dejando estado 'error' (sin
+      // lockedAt): la venta queda disponible para reintentar enseguida.
+      await DB.update('sales',saleId,{fiscal:{...fiscalDefault(cfg),...f0,lockedAt:null,lockedBy:null,
+        estado:'error',error:(ex&&ex.message)||'Error de facturación'},updatedAt:Date.now()});
       throw ex;
     }
-    // Guarda el resultado (emitido, no_fiscal o error): en todos los casos libera el candado.
+    // Guarda el resultado (emitido, no_fiscal o error). El objeto resultante NO
+    // lleva lockedAt, por lo que el candado queda LIBERADO en todos los casos.
     await DB.update('sales',saleId,{fiscal,updatedAt:Date.now()});
     Audit.log('sale.fiscal','sale',{id:saleId,number:sale.number,estado:fiscal.estado,cae:fiscal.cae||''});
     return fiscal;
