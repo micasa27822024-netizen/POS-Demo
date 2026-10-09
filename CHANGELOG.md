@@ -2,6 +2,75 @@
 
 Formato basado en *Keep a Changelog*. Fechas en formato ISO.
 
+## [1.1.11] — Sin riesgo legal en el comprobante + montos no negativos
+
+Dos puntos de la auditoría externa, ambos resueltos **dentro del plan gratuito
+(Spark), sin backend**.
+
+### Comprobante: ya no parece una factura
+- Se **quitó el selector de tipo fiscal** (A / B / C). Mientras no esté conectada
+  la facturación electrónica (AFIP/ARCA), todo se emite como **comprobante
+  interno «X»**. Una configuración vieja que tuviera A/B/C se fuerza a «X».
+- El documento impreso ya **no dice «FACTURA»**: dice **«COMPROBANTE INTERNO»** y
+  muestra, bien visible, la leyenda **«NO VÁLIDO COMO FACTURA»** (arriba y al pie),
+  independientemente de lo que se escriba en la leyenda editable.
+- Así se saca el riesgo de emitir algo que parezca una factura legal sin serlo.
+
+### Reglas de Firestore: nada de importes negativos
+- Las reglas de seguridad ahora **rechazan en el servidor** cualquier intento de
+  guardar importes negativos: total, subtotal, costo y descuentos de una venta;
+  el monto de un pago; el monto de un movimiento de caja; y el monto de un
+  movimiento de cuenta corriente.
+- La **ganancia (profit) sí puede ser negativa** a propósito (venta por debajo del
+  costo), así que queda fuera de esta validación.
+- Se agregaron casos de prueba de estas reglas (corren con el emulador de Firestore).
+
+## [1.1.10] — La caché del POS ya no se rompe por las fotos
+
+Último punto de la revisión (punto E). La caché del POS se guarda en el navegador,
+que tiene un límite de espacio (unos 5 MB). Como las fotos de los productos pueden
+pesar bastante, con catálogos de varios cientos de artículos con foto el guardado
+superaba ese límite y **fallaba sin avisar**: la caché no se guardaba y el POS
+volvía a leer todo el catálogo en cada apertura, justo lo que la caché venía a
+evitar.
+
+- **Se separan las fotos del resto de los datos.** El catálogo «liviano» (nombre,
+  precio, stock, códigos…) ahora **siempre entra y se guarda**, así que el ahorro
+  de lecturas queda garantizado aunque haya muchas fotos.
+- **Las fotos se guardan aparte y con un límite de espacio.** Entran todas las que
+  caben; si el catálogo es muy grande, las que no entran simplemente se muestran
+  con el ícono genérico de producto. **El POS sigue funcionando igual** (buscar,
+  agregar al carrito, cobrar); solo puede faltar alguna miniatura.
+- Resultado: con catálogos grandes el POS **ya no vuelve a descargar todo** en
+  cada apertura — se mantiene el ahorro de lecturas de Firestore.
+
+Con esto quedan cubiertos los cinco puntos nuevos de la revisión (A a E).
+
+## [1.1.9] — Clientes al día en el POS, alertas de reposición y relojes
+
+Tres mejoras en la sincronización y las alertas, a partir de la revisión.
+
+- **Los clientes ahora aparecen al toque en el POS (punto B).** Antes, un cliente
+  nuevo, un cambio de límite de crédito o un cobro de deuda podían tardar hasta
+  12 horas en reflejarse en la pantalla de ventas, porque esos cambios no
+  quedaban marcados con su fecha de actualización. Ahora sí: al crear, editar o
+  cobrar, el cliente se actualiza enseguida en el POS.
+- **Botón para recalcular las alertas de reposición (punto C).** La señal de «hay
+  que reponer» solo se calculaba cuando un producto se movía, así que los
+  artículos que ya estaban bajo el mínimo y quedaban quietos no aparecían en el
+  Dashboard. Agregamos en **Productos** un botón (solo admin) **«Recalcular
+  reposición»** que revisa todo el catálogo de una y corrige las alertas. Avisa
+  cuántos productos corrigió.
+- **Tolerancia a relojes desfasados entre computadoras (punto D).** Si una PC
+  tenía la hora atrasada, un cambio hecho ahí (por ejemplo, un precio) podía no
+  llegar a las demás hasta 12 horas después, y mientras tanto se vendía al precio
+  viejo. Ahora la sincronización mira **10 minutos hacia atrás** para no
+  perderse esos cambios, y la caché se refresca por completo cada **2 horas** (en
+  vez de 12). Los cambios se propagan mucho más rápido.
+
+> El botón «Recalcular reposición» conviené usarlo una vez después de actualizar,
+> para dejar las alertas del Dashboard al día con el stock actual.
+
 ## [1.1.8] — Los cajeros vuelven a poder cobrar (arreglo crítico)
 
 Un arreglo anterior hizo que, al vender, el sistema guardara en el producto una
