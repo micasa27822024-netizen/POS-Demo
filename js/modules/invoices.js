@@ -6,6 +6,9 @@ import { ok, err, warn } from '../utils/toast.js';
 import { Audit } from '../services/audit.service.js';
 import { money, num } from '../utils/format.js';
 import { esc } from '../utils/escape.js';
+import { ESTADO_FISCAL } from '../services/fiscal.service.js';
+import { Fiscal } from '../services/fiscal.service.js';
+import { Sales } from '../services/sales.service.js';
 
 let USER, BIZ={}, CFG={}, SALES=[], selId='';
 const DEF={tipo:'X',puntoVenta:'0001',nextNumber:1,condicionIva:'Monotributo',discriminaIva:false,ivaPct:21,
@@ -32,7 +35,14 @@ function current(){
     items:[{qty:2,unit:'u',name:'Gaseosa 1.5L',price:1800,discount:0},{qty:0.5,unit:'kg',name:'Queso cremoso',price:9200,discount:0}],
     subtotal:8200,discount:200,total:8000};
 }
-function compNumber(s){ return `${CFG.puntoVenta}-${String(s.number||0).padStart(8,'0')}`; }
+function compNumber(s){
+  // C1: numeración fiscal (sale.fiscal.numero) separada de la interna (sale.number).
+  // Si hay numeración fiscal asignada por AFIP, se usa esa; si no, la interna.
+  const f=s&&s.fiscal;
+  const pv=(f&&f.puntoVenta)||CFG.puntoVenta;
+  const n=(f&&+f.numero>0)?f.numero:(s.number||0);
+  return `${pv}-${String(n).padStart(8,'0')}`;
+}
 
 function invoiceHtml(s){
   const neto=CFG.discriminaIva?+(s.total/(1+(CFG.ivaPct||0)/100)).toFixed(2):s.total;
@@ -62,8 +72,21 @@ function invoiceHtml(s){
         <div style="display:flex;justify-content:space-between"><span>IVA ${CFG.ivaPct}%</span><span>${money(iva)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-size:17px;font-weight:800;border-top:2px solid #333;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>${money(s.total)}</span></div></div>
     <div style="margin-top:18px;font-size:10.5px;color:#666;border-top:1px dashed #999;padding-top:8px">${esc(CFG.legend)}</div>
-    ${CFG.tipo!=='X'?`<div style="margin-top:10px;font-size:10.5px;color:#666">CAE: __________________  Vto. CAE: __________  <i>(pendiente de integración AFIP/ARCA)</i></div>`:''}
+    ${caeFooter(s)}
   </div>`;
+}
+
+// C1: pie con CAE. Si la venta ya tiene datos fiscales reales (sale.fiscal con
+// CAE aprobado), los muestra; si no, deja el espacio reservado para la futura
+// integración AFIP/ARCA. El comprobante interno X no lleva CAE.
+function caeFooter(s){
+  const f=s&&s.fiscal;
+  if(f&&f.estado==='aprobado'&&f.cae){
+    return `<div style="margin-top:10px;font-size:11px;color:#111"><b>CAE:</b> ${esc(f.cae)} &nbsp; <b>Vto. CAE:</b> ${esc(f.caeVto||'')}</div>`;
+  }
+  if(CFG.tipo==='X') return '';
+  const estado=f?ESTADO_FISCAL[f.estado]||'':'';
+  return `<div style="margin-top:10px;font-size:10.5px;color:#666">CAE: __________________  Vto. CAE: __________  <i>(${estado?esc(estado):'pendiente de integraci\u00f3n AFIP/ARCA'})</i></div>`;
 }
 
 function render(view){
@@ -80,7 +103,9 @@ function render(view){
         <div class="field"><label>Leyenda al pie</label><textarea class="input" id="legend" rows="2">${esc(CFG.legend)}</textarea></div>
       </div>
       <div class="card card-pad mt-16" style="border-left:3px solid var(--info)"><b style="font-size:13px">🔌 Integración fiscal (AFIP/ARCA)</b>
-        <p style="color:var(--text-2);font-size:12.5px;margin-top:6px;line-height:1.6">La plantilla ya contempla CUIT, condición de IVA, punto de venta, numeración y espacio para CAE/vto. Cuando se habilite la facturación electrónica, el número y el CAE se completarán automáticamente desde el webservice, sin rehacer esta vista.</p></div></div>
+        <p style="color:var(--text-2);font-size:12.5px;margin-top:6px;line-height:1.6">La plantilla ya contempla CUIT, condición de IVA, punto de venta, numeración y espacio para CAE/vto. Cuando se habilite la facturación electrónica, el número y el CAE se completarán automáticamente desde el webservice, sin rehacer esta vista.</p>
+        <p style="color:var(--text-2);font-size:12px;margin-top:6px">Estado de la integración: <b>${Fiscal.isEnabled()?'conectada':'no conectada (comprobante interno X)'}</b></p>
+        <button class="btn btn-ghost mt-8" id="btnCae" style="font-size:12.5px" ${SALES.length?'':'disabled'}>🧾 Solicitar CAE para la venta seleccionada</button></div></div>
       <div><div class="card card-pad"><div class="field"><label>Vista previa desde venta</label><select class="select" id="sel">
         ${SALES.length?SALES.map(s=>`<option value="${s.id}" ${selId===s.id?'selected':''}>#${s.number} · ${esc(s.clientName||'Consumidor Final')} · ${money(s.total)}</option>`).join(''):'<option value="">(sin ventas — datos de ejemplo)</option>'}</select></div>
         <div style="background:#e5e7eb;padding:16px;border-radius:8px;max-height:620px;overflow:auto"><div id="preview" style="background:#fff;box-shadow:var(--shadow-lg)"></div></div></div></div></div>`;
@@ -94,9 +119,27 @@ function render(view){
   bind('sel','onchange',e=>{selId=e.target.value;preview();});
   bind('btnSave','onclick',save);
   bind('btnPrint','onclick',printInv);
+  bind('btnCae','onclick',askCae);
   preview();
 }
 function preview(){ const p=document.getElementById('preview'); if(p) p.innerHTML=invoiceHtml(current()); }
+
+// C1: solicita el CAE de la venta seleccionada por la interfaz fiscal. Con el
+// proveedor nulo (sin backend) queda como comprobante interno X y se avisa.
+async function askCae(){
+  const s=SALES.find(x=>x.id===selId);
+  if(!s) return warn('Elegí una venta real para emitir el comprobante');
+  const btn=document.getElementById('btnCae'); if(btn) btn.disabled=true;
+  try{
+    const f=await Sales.requestFiscal(selId);
+    s.fiscal=f; preview();
+    if(f.estado==='aprobado') ok('CAE obtenido: '+f.cae);
+    else if(f.estado==='no_fiscal') warn('Facturación electrónica no conectada: queda como comprobante interno X');
+    else if(f.estado==='error') err('AFIP/ARCA: '+(f.error||'error'));
+    else ok('Comprobante actualizado ('+(ESTADO_FISCAL[f.estado]||f.estado)+')');
+  }catch(ex){ err(ex.message||'No se pudo solicitar el CAE'); }
+  finally{ if(btn) btn.disabled=false; }
+}
 async function save(){
   try{ await DB.set('settings','invoice',{...CFG}); await Audit.log('invoice.config','settings',{tipo:CFG.tipo,puntoVenta:CFG.puntoVenta});
     ok('Configuración guardada'); }catch(ex){ err(ex.message||'No se pudo guardar'); }
