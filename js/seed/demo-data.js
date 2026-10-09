@@ -29,7 +29,7 @@ export const DEMO={
   clients:[
     {id:'cl_1',name:'Juan',lastName:'Pérez',dni:'30111222',phone:'3794-555666',email:'juan@mail.com',city:'Corrientes',province:'Corrientes',creditLimit:50000,balance:12500,active:true,createdAt:now-15*day,demo:true},
     {id:'cl_2',name:'María',lastName:'Gómez',dni:'28999888',phone:'3794-777888',email:'maria@mail.com',city:'Resistencia',province:'Chaco',creditLimit:30000,balance:0,active:true,createdAt:now-8*day,demo:true},
-    {id:'cl_3',name:'Consumidor',lastName:'Final',dni:'',phone:'',email:'',creditLimit:0,balance:0,active:true,createdAt:now-40*day,demo:true}
+    {id:'cl_3',name:'Consumidor',lastName:'Final',dni:'',phone:'',email:'',creditLimit:0,balance:0,active:true,isDefault:true,createdAt:now-40*day,demo:true}
   ],
   products:[
     {id:'p_1',code:'A001',barcode:'7790001000011',name:'Coca Cola 2.25L',description:'Gaseosa cola',categoryId:'c_beb',subcategoryId:'s_2',brand:'Coca-Cola',unit:'unidad',cost:1200,price:1850,iva:21,stock:48,stockMin:12,stockMax:120,supplierId:'sup_1',image:'',active:true,createdAt:now-25*day,demo:true},
