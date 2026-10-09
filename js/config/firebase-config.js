@@ -19,11 +19,13 @@
 // ============================================================================
 
 export const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  projectId: "TU_PROYECTO",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+ apiKey: "AIzaSyC3puce9bd4baPA0kf9Kk1j1lnutreg6aU",
+  authDomain: "pos-demo-e7d18.firebaseapp.com",
+  databaseURL: "https://pos-demo-e7d18-default-rtdb.firebaseio.com",
+  projectId: "pos-demo-e7d18",
+  storageBucket: "pos-demo-e7d18.firebasestorage.app",
+  messagingSenderId: "723358989416",
+  appId: "1:723358989416:web:638ec9a2a88bbf10eb8fdd"
 };
 
 // Si todavía no cargaste credenciales reales, la app corre en MODO DEMO
