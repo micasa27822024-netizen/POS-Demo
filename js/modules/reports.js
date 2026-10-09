@@ -5,8 +5,11 @@ import { DB } from '../services/db.service.js';
 import { ok, err } from '../utils/toast.js';
 import { money, num, pct, fdate, dayStart, dayEnd, monthStart, dayKeyAR } from '../utils/format.js';
 import { esc as escapeHtml } from '../utils/escape.js';
+// Agregación PURA y testeable: netea las devoluciones por SU fecha, igual que el
+// Dashboard, para que los números de Reportes cuadren.
+import { aggregateReport } from '../services/report-calc.js';
 
-let USER, SALES=[], PURCH=[], REGS=[], from='', to='', preset='30';
+let USER, SALES=[], RETS=[], PURCH=[], REGS=[], from='', to='', preset='30';
 const DAY=86400000;
 (async()=>{
   USER=await requireAuth('reports'); if(!USER) return;
@@ -17,8 +20,9 @@ async function reload(){
   // B1: se consulta solo el rango seleccionado, nunca las colecciones completas.
   const [f,t]=range();
   const tt=isFinite(t)?t:Date.now();
-  [SALES,PURCH,REGS]=await Promise.all([
+  [SALES,RETS,PURCH,REGS]=await Promise.all([
     DB.list('sales',{where:[['at','>=',f],['at','<=',tt]],orderBy:['at','desc']}),
+    DB.list('returns',{where:[['at','>=',f],['at','<=',tt]]}),
     DB.list('purchases',{where:[['at','>=',f],['at','<=',tt]]}),
     DB.list('cashRegisters',{where:[['status','==','cerrada']]})
   ]);
@@ -54,48 +58,34 @@ const sc=(l,v,c='')=>`<div class="card card-pad"><span style="font-size:12px;col
 const PM={efectivo:'Efectivo',debito:'T. débito',credito:'T. crédito',transferencia:'Transferencia',cuenta_corriente:'Cuenta corriente',otros:'Otros'};
 
 function barChart(data,fmt){
-  const max=Math.max(1,...data.map(d=>d.value));
+  const max=Math.max(1,...data.map(d=>Math.abs(d.value)));
   return `<div class="bars">${data.map(d=>`<div class="bar-row"><span class="bar-lbl">${escapeHtml(d.label)}</span>
-    <div class="bar-track"><div class="bar-fill" style="width:${(d.value/max*100).toFixed(1)}%"></div></div>
+    <div class="bar-track"><div class="bar-fill" style="width:${Math.max(0,d.value/max*100).toFixed(1)}%"></div></div>
     <span class="bar-val">${fmt(d.value)}</span></div>`).join('')||'<p class="empty">Sin datos</p>'}</div>`;
 }
 
 function compute(){
+  // Ventas del período (sin anuladas) y devoluciones del período.
   const sales=SALES.filter(v=>inRange(v.at)&&v.status!=='anulada');
-  // Netos de devoluciones: a cada venta se le resta lo efectivamente devuelto
-  // (returnedTotal) y la ganancia devuelta (returnedProfit).
-  const fact=sales.reduce((s,v)=>s+((+v.total||0)-(+v.returnedTotal||0)),0);
-  const prof=sales.reduce((s,v)=>s+((+v.profit||0)-(+v.returnedProfit||0)),0);
+  const returns=RETS.filter(r=>inRange(r.at));
+  // Agregación neta: las devoluciones restan en SU fecha (como el Dashboard), por
+  // eso Σ medios de pago == Facturación y todo cuadra.
+  const agg=aggregateReport(sales,returns,iso);
   const tickets=sales.length;
-  const items=sales.reduce((s,v)=>s+(v.items||[]).reduce((a,it)=>a+(+it.qty||0),0),0);
-  // Medios de pago
-  const pay={};
-  sales.forEach(v=>(v.payments||[]).forEach(p=>{pay[p.method]=(pay[p.method]||0)+(+p.amount||0);}));
-  // Top productos
-  const prodMap={};
-  sales.forEach(v=>(v.items||[]).forEach(it=>{
-    const k=it.productId||it.name; const e=prodMap[k]||(prodMap[k]={name:it.name,qty:0,rev:0});
-    e.qty+=(+it.qty||0); e.rev+=((+it.price||0)*(+it.qty||0))-(+it.discount||0);
-  }));
-  const topRev=Object.values(prodMap).sort((a,b)=>b.rev-a.rev).slice(0,8);
-  // Por vendedor
-  const sellMap={};
-  sales.forEach(v=>{const k=v.userName||'—';sellMap[k]=(sellMap[k]||0)+((+v.total||0)-(+v.returnedTotal||0));});
-  const sellers=Object.entries(sellMap).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
-  // Por día
-  const dayMap={};
-  sales.forEach(v=>{const d=iso(v.at);dayMap[d]=(dayMap[d]||0)+((+v.total||0)-(+v.returnedTotal||0));});
+  const topRev=agg.topRev.slice(0,8);
+  // Serie por día a partir del mapa neto (ventas − devoluciones por día).
   const [f,t]=range(); const days=[];
   if(isFinite(f)&&isFinite(t)){
     for(let d=new Date(from+'T00:00:00').getTime(); d<=t && days.length<60; d+=DAY){
-      const k=iso(d); days.push({label:fdate(d).slice(0,5),value:dayMap[k]||0});
+      const k=iso(d); days.push({label:fdate(d).slice(0,5),value:+(agg.dayMap[k]||0).toFixed(2)});
     }
   }
   // Compras y caja
   const compras=PURCH.filter(p=>inRange(p.at)).reduce((s,p)=>s+(+p.total||0),0);
   const closed=REGS.filter(r=>r.status==='cerrada'&&inRange(r.closedAt||r.openedAt));
   const diff=closed.reduce((s,r)=>s+(+r.difference||0),0);
-  return {sales,fact,prof,tickets,items,pay,topRev,sellers,days,compras,closed,diff};
+  return {sales,returns,fact:agg.fact,prof:agg.prof,tickets,items:agg.items,
+    pay:agg.pay,topRev,sellers:agg.sellers,days,compras,closed,diff};
 }
 
 function paint(){
@@ -127,9 +117,13 @@ function exportCsv(){
   const r=compute();
   if(!r.sales.length) return err('No hay ventas en el período');
   const esc=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`;
-  const head=['Numero','Fecha','Cliente','Vendedor','Subtotal','Descuento','Total','Ganancia','Estado'];
+  const head=['Numero','Fecha','Cliente','Vendedor','Subtotal','Descuento','Total','Devuelto','Total neto','Ganancia','Estado'];
   const lines=[head.join(',')];
-  r.sales.forEach(v=>lines.push([v.number,new Date(v.at).toLocaleString('es-AR'),v.clientName||'Consumidor Final',v.userName||'',v.subtotal||0,v.discount||0,v.total||0,v.profit||0,v.status||'completada'].map(esc).join(',')));
+  r.sales.forEach(v=>{
+    const ret=+v.returnedTotal||0; const neto=+(((+v.total||0)-ret).toFixed(2));
+    lines.push([v.number,new Date(v.at).toLocaleString('es-AR'),v.clientName||'Consumidor Final',v.userName||'',
+      v.subtotal||0,v.discount||0,v.total||0,ret,neto,v.profit||0,v.status||'completada'].map(esc).join(','));
+  });
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`ventas_${from}_a_${to}.csv`; a.click(); URL.revokeObjectURL(a.href);

@@ -131,7 +131,7 @@ async function askCae(){
   if(!s) return warn('Elegí una venta real para emitir el comprobante');
   const btn=document.getElementById('btnCae'); if(btn) btn.disabled=true;
   try{
-    const f=await Sales.requestFiscal(selId);
+    const f=await Sales.requestFiscal(selId,USER);
     s.fiscal=f; preview();
     if(f.estado==='aprobado') ok('CAE obtenido: '+f.cae);
     else if(f.estado==='no_fiscal') warn('Facturación electrónica no conectada: queda como comprobante interno X');
