@@ -1,5 +1,6 @@
 // Autenticación. Firebase Auth en producción; sesión simulada en MODO DEMO.
-import { auth, fb, DEMO_MODE } from './firebase.js';
+// A1: en producción el perfil es el documento users/{uid} (ID = uid de Auth).
+import { auth, fb, DEMO_MODE, createSecondaryAuth } from './firebase.js';
 import { DB } from './db.service.js';
 
 const SESS='pos_demo_session';
@@ -9,6 +10,7 @@ const listeners=[];
 export function onUser(cb){ listeners.push(cb); if(currentProfile!==undefined) cb(currentProfile); }
 function emit(){ listeners.forEach(cb=>cb(currentProfile)); }
 
+// Solo DEMO: el perfil se busca por email (IDs locales aleatorios).
 async function loadProfile(email){
   const list=await DB.list('users',{where:[['email',email==null?'':'==',email]]});
   return list[0]||null;
@@ -25,7 +27,15 @@ export const Auth = {
     }
     return new Promise(res=>{
       fb.onAuthStateChanged(auth, async(u)=>{
-        currentProfile = u ? (await DB.list('users',{where:[['email','==',u.email]]}))[0]||{email:u.email,role:'cajero',name:u.email} : null;
+        if(!u){ currentProfile=null; emit(); return res(); }
+        // Perfil por UID (la regla permite leer el doc propio).
+        const prof=await DB.get('users',u.uid).catch(()=>null);
+        if(!prof || prof.active===false){
+          // Sin perfil o inactivo: no se concede acceso.
+          await fb.signOut(auth).catch(()=>{});
+          currentProfile=null; emit(); return res();
+        }
+        currentProfile={...prof,id:u.uid};
         emit(); res();
       });
     });
@@ -42,9 +52,12 @@ export const Auth = {
       return p;
     }
     const cred=await fb.signInWithEmailAndPassword(auth,email,password);
-    currentProfile=(await DB.list('users',{where:[['email','==',email]]}))[0]||null;
-    if(currentProfile?.active===false){ await fb.signOut(auth); throw new Error('Usuario desactivado'); }
-    if(currentProfile) await DB.update('users',currentProfile.id,{lastLogin:Date.now()}).catch(()=>{});
+    const uid=cred.user.uid;
+    const prof=await DB.get('users',uid).catch(()=>null);
+    if(!prof){ await fb.signOut(auth); throw new Error('El usuario no tiene un perfil asignado. Contactá al administrador.'); }
+    if(prof.active===false){ await fb.signOut(auth); throw new Error('Usuario desactivado'); }
+    currentProfile={...prof,id:uid};
+    await DB.update('users',uid,{lastLogin:Date.now()}).catch(()=>{});
     emit(); return currentProfile;
   },
 
@@ -60,7 +73,14 @@ export const Auth = {
 
   async changePassword(newPass){
     if(DEMO_MODE){ if(currentProfile) await DB.update('users',currentProfile.id,{demoPassword:newPass}); return true; }
-    await fb.updatePassword(auth.currentUser,newPass); return true;
+    try{
+      await fb.updatePassword(auth.currentUser,newPass);
+    }catch(ex){
+      if(ex&&ex.code==='auth/requires-recent-login')
+        throw new Error('Por seguridad, volvé a iniciar sesión antes de cambiar la contraseña.');
+      throw ex;
+    }
+    return true;
   },
 
   // Alta de usuario (perfil + credencial). En demo solo crea el perfil.
@@ -69,7 +89,15 @@ export const Auth = {
       const exists=await loadProfile(email); if(exists) throw new Error('Ya existe un usuario con ese email');
       return DB.add('users',{name,email,role,active,demoPassword:password,createdAt:Date.now(),lastLogin:null});
     }
-    const cred=await fb.createUserWithEmailAndPassword(auth,email,password);
-    return DB.add('users',{name,email,role,active,uid:cred.user.uid,createdAt:Date.now(),lastLogin:null});
+    // Unicidad de email (el admin puede consultar todos los usuarios).
+    const dup=await DB.list('users',{where:[['email','==',email]]}).catch(()=>[]);
+    if(dup && dup.length) throw new Error('Ya existe un usuario con ese email');
+    // Crea la credencial en una instancia secundaria para NO cerrar la sesión del admin.
+    const sec=await createSecondaryAuth();
+    const cred=await sec.authMod.createUserWithEmailAndPassword(sec.secAuth,email,password);
+    const uid=cred.user.uid;
+    // El perfil se escribe con la sesión del admin (instancia principal).
+    await sec.authMod.signOut(sec.secAuth).catch(()=>{});
+    return DB.set('users',uid,{name,email,role,active,uid,createdAt:Date.now(),lastLogin:null});
   }
 };

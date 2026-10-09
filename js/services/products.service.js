@@ -39,13 +39,18 @@ export const Products={
     return this.create({...rest,name:rest.name+' (copia)',code:(rest.code||'')+'-C',barcode:''});
   },
   // Registra un movimiento de stock y actualiza el stock del producto.
-  async moveStock({productId,type,qty,reason,userId,userName,refId}){
-    const p=await DB.get('products',productId); if(!p) throw new Error('Producto inexistente');
-    const delta=['venta','ajuste_negativo','anulacion_compra'].includes(type)?-Math.abs(qty):Math.abs(qty);
-    const newStock=+( (p.stock||0)+delta ).toFixed(3);
-    await DB.update('products',productId,{stock:newStock});
-    await DB.add('stockMovements',{productId,productName:p.name,type,qty:Math.abs(qty),delta,
-      stockAfter:newStock,reason:reason||'',userId,userName,refId:refId||null,at:Date.now()});
-    return newStock;
+  // A3: atómico con increment. Si recibe `tx`, opera dentro de esa transacción;
+  // si no, abre su propia transacción para que stock y movimiento nunca diverjan.
+  async moveStock({productId,type,qty,reason,userId,userName,refId},tx){
+    const run=async(t)=>{
+      const p=await t.get('products',productId); if(!p) throw new Error('Producto inexistente');
+      const delta=['venta','ajuste_negativo','anulacion_compra'].includes(type)?-Math.abs(qty):Math.abs(qty);
+      const newStock=+( (p.stock||0)+delta ).toFixed(3);
+      t.update('products',productId,{stock:DB.increment(delta),updatedAt:Date.now()});
+      t.add('stockMovements',{productId,productName:p.name,type,qty:Math.abs(qty),delta,
+        stockAfter:newStock,reason:reason||'',userId,userName,refId:refId||null,at:Date.now()});
+      return newStock;
+    };
+    return tx ? run(tx) : DB.transaction(run);
   }
 };

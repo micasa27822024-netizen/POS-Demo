@@ -36,66 +36,85 @@ export function calcTotals(items,generalDiscount=0){
   };
 }
 
-async function nextNumber(){
-  const [sales,biz]=await Promise.all([DB.list('sales'),DB.get('settings','business')]);
-  const base=(biz&&parseInt(biz.numberStart,10))||1000;
-  const max=sales.reduce((m,s)=>Math.max(m,s.number||0),base);
-  return max+1;
-}
-
 export const Sales={
   list:(opts)=>DB.list('sales',opts),
   get:(id)=>DB.get('sales',id),
   calcTotals,
 
-  // Confirma una venta de forma "transaccional" a nivel de aplicación:
-  // 1) crea la venta  2) descuenta stock  3) registra pagos
-  // 4) actualiza caja (efectivo)  5) actualiza cuenta corriente del cliente.
+  // Confirma una venta de forma ATÓMICA (A3): una sola transacción agrupa
+  // numeración, validación de stock/crédito, creación de venta, descuento de
+  // stock, pagos, caja y cuenta corriente. Si algo falla, no queda nada a medias.
   async confirm({items,generalDiscount=0,payments,clientId,client,user,cashReceived=0}){
     if(!items||!items.length) throw new Error('El carrito está vacío');
     const t=calcTotals(items,generalDiscount);
     const paid=payments.reduce((s,p)=>s+(+p.amount||0),0);
     const ccAmount=payments.filter(p=>p.method==='cuenta_corriente').reduce((s,p)=>s+(+p.amount||0),0);
-    // Validación: lo pagado (sin contar vuelto) debe cubrir el total.
     if(+paid.toFixed(2) < t.total) throw new Error('El pago no cubre el total de la venta');
     if(ccAmount>0 && !clientId) throw new Error('Para cuenta corriente debés seleccionar un cliente');
-
-    const cashApplied=payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+(+p.amount||0),0);
-    const number=await nextNumber();
-    const sale=await DB.add('sales',{
-      number, items, ...t, discount:t.itemDiscount+t.generalDiscount,
-      payments, clientId:clientId||null, clientName:client?`${client.name} ${client.lastName||''}`.trim():'Consumidor Final',
-      userId:user.id, userName:user.name, status:'completada',
-      cashReceived:+cashReceived||0, change:Math.max(0,+((cashReceived||0)-cashApplied).toFixed(2)),
-      at:Date.now()
-    });
-
-    // Stock
+    // Validación de montos no negativos.
     for(const it of items){
-      try{ await Products.moveStock({productId:it.productId,type:'venta',qty:it.qty,
-        reason:'Venta #'+number,userId:user.id,userName:user.name,refId:sale.id}); }catch(e){ console.warn(e); }
+      if(!(it.qty>0)) throw new Error('Cantidad inválida en «'+(it.name||'ítem')+'»');
+      if((+it.price||0)<0 || (+it.discount||0)<0) throw new Error('Precio o descuento inválido');
     }
-    // Pagos
-    for(const p of payments){
-      await DB.add('payments',{saleId:sale.id,number,method:p.method,amount:+p.amount,
-        clientId:clientId||null,userId:user.id,at:Date.now()});
+    if(t.generalDiscount>t.subtotal) throw new Error('El descuento supera el subtotal');
+
+    const biz=await DB.get('settings','business').catch(()=>null);
+    const allowNeg=!!(biz&&biz.allowNegativeStock);
+    const numberStart=(biz&&parseInt(biz.numberStart,10))||1000;
+    const cashApplied=payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+(+p.amount||0),0);
+
+    // Caja abierta del usuario (consulta FUERA de la transacción: Firestore no
+    // admite queries dentro de runTransaction). B2 refina la obligatoriedad.
+    let openCash=null;
+    if(cashApplied>0){
+      const regs=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
+      openCash=regs.find(r=>r.openedBy===user.id)||regs[0]||null;
     }
-    // Caja: registra el efectivo en la caja abierta del usuario (si existe)
-    const cashPaid=payments.filter(p=>p.method==='efectivo').reduce((s,p)=>s+(+p.amount||0),0);
-    if(cashPaid>0){
-      const open=(await DB.list('cashRegisters',{where:[['status','==','abierta']]}))[0];
-      if(open){ await DB.add('cashMovements',{registerId:open.id,type:'venta',amount:cashPaid,
-        concept:'Venta #'+number,saleId:sale.id,userId:user.id,at:Date.now()}); }
-    }
-    // Cuenta corriente del cliente
-    if(ccAmount>0 && clientId){
-      const c=await DB.get('clients',clientId);
-      const newBalance=+((c?.balance||0)+ccAmount).toFixed(2);
-      await DB.update('clients',clientId,{balance:newBalance});
-      await DB.add('accountsReceivable',{clientId,type:'debito',amount:ccAmount,balance:newBalance,
-        concept:'Venta #'+number,saleId:sale.id,userId:user.id,at:Date.now()});
-    }
-    await Audit.log('sale','sale',{id:sale.id,number,total:t.total});
-    return sale;
+
+    return DB.transaction(async(tx)=>{
+      // 1) LECTURAS
+      const prod={};
+      for(const it of items){ prod[it.productId]=await tx.get('products',it.productId); }
+      const cli=(ccAmount>0&&clientId)?await tx.get('clients',clientId):null;
+      const counter=await tx.get('counters','sales');
+      // 2) VALIDACIONES
+      for(const it of items){ const p=prod[it.productId];
+        if(!p) throw new Error('Producto inexistente en la venta');
+        if(!allowNeg && (+p.stock||0) < it.qty) throw new Error('Stock insuficiente de «'+p.name+'»');
+      }
+      if(ccAmount>0 && cli){ const lim=+cli.creditLimit||0;
+        if(lim>0 && (+cli.balance||0)+ccAmount>lim) throw new Error('La venta supera el límite de crédito del cliente'); }
+      // 3) NUMERACIÓN ATÓMICA
+      const number = counter ? (counter.last||numberStart)+1 : numberStart+1;
+      tx.set('counters','sales',{last:number});
+      // 4) ESCRITURAS
+      const saleId=tx.add('sales',{
+        number, items, ...t, discount:t.itemDiscount+t.generalDiscount,
+        payments, clientId:clientId||null,
+        clientName:client?`${client.name} ${client.lastName||''}`.trim():'Consumidor Final',
+        userId:user.id, userName:user.name, status:'completada',
+        cashReceived:+cashReceived||0, change:Math.max(0,+((cashReceived||0)-cashApplied).toFixed(2)),
+        at:Date.now()
+      });
+      for(const it of items){ const p=prod[it.productId];
+        const newStock=+((+p.stock||0)-it.qty).toFixed(3);
+        tx.update('products',it.productId,{stock:DB.increment(-it.qty),updatedAt:Date.now()});
+        tx.add('stockMovements',{productId:it.productId,productName:p.name,type:'venta',qty:it.qty,delta:-it.qty,
+          stockAfter:newStock,reason:'Venta #'+number,userId:user.id,userName:user.name,refId:saleId,at:Date.now()});
+      }
+      for(const p of payments){ tx.add('payments',{saleId,number,method:p.method,amount:+p.amount,
+        clientId:clientId||null,userId:user.id,at:Date.now()}); }
+      if(cashApplied>0 && openCash){ tx.add('cashMovements',{registerId:openCash.id,type:'venta',amount:cashApplied,
+        concept:'Venta #'+number,saleId,userId:user.id,at:Date.now()}); }
+      if(ccAmount>0 && clientId){ const newBalance=+(((cli&&+cli.balance)||0)+ccAmount).toFixed(2);
+        tx.update('clients',clientId,{balance:DB.increment(ccAmount),updatedAt:Date.now()});
+        tx.add('accountsReceivable',{clientId,type:'debito',amount:ccAmount,balance:newBalance,
+          concept:'Venta #'+number,saleId,userId:user.id,at:Date.now()}); }
+      const sale={id:saleId,number,items,...t,discount:t.itemDiscount+t.generalDiscount,
+        clientId:clientId||null,userId:user.id,userName:user.name,status:'completada',at:Date.now()};
+      // Auditoría: mejor esfuerzo, fuera del camino crítico de la transacción.
+      Audit.log('sale','sale',{id:saleId,number,total:t.total});
+      return sale;
+    });
   }
 };
