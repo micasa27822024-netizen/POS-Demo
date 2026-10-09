@@ -9,6 +9,7 @@ import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
 import { money, fdatetime } from '../utils/format.js';
 import { esc } from '../utils/escape.js';
+import { assertUnique } from '../utils/unique.js';
 
 let USER, LIST=[], q='';
 (async()=>{
@@ -71,9 +72,12 @@ function openForm(c){
     const payload={name:data.name,lastName:f.lastName.value.trim(),dni:f.dni.value.trim(),phone:f.phone.value.trim(),
       email:f.email.value.trim(),creditLimit:+f.creditLimit.value||0,city:f.city.value.trim(),province:f.province.value.trim(),
       active:c?c.active!==false:true};
-    try{ if(c){ await DB.update('clients',c.id,payload); await Audit.log('update','client',{id:c.id}); }
-      else { payload.balance=0; payload.createdAt=Date.now(); const d=await DB.add('clients',payload); await Audit.log('create','client',{id:d.id,name:data.name}); }
-      await reload(); m.close(); ok('Guardado'); paint();
+    try{
+      // Unicidad: DNI/CUIT y email (email sin distinguir mayús/minús).
+      await assertUnique('clients','dni',payload.dni,c?.id,'El DNI/CUIT');
+      await assertUnique('clients','email',payload.email,c?.id,'El email',true);
+      if(c){ await DB.update('clients',c.id,payload); await Audit.log('update','client',{id:c.id}); }
+      else { payload.balance=0; payload.createdAt=Date.now(); const d=await DB.add('clients',payload); await Audit.log('create','client',{id:d.id,name:data.name}); }      await reload(); m.close(); ok('Guardado'); paint();
     }catch(ex){ err(ex.message||'No se pudo guardar'); }};
 }
 async function openCC(c){
@@ -103,8 +107,7 @@ function openPay(c){
   save.onclick=async()=>{const amount=+f.amount.value;
     if(!amount||amount<=0) return warn('Ingresá un monto válido');
     if(amount>(c.balance||0)+0.001) return warn('El pago no puede superar el saldo');
-    const method=f.method.value;
-    const newBalance=+((c.balance||0)-amount).toFixed(2);
+    const method=f.method.value;    const newBalance=+((c.balance||0)-amount).toFixed(2);
     try{
       await DB.update('clients',c.id,{balance:newBalance});
       await DB.add('accountsReceivable',{clientId:c.id,type:'credito',amount,balance:newBalance,

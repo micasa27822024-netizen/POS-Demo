@@ -14,7 +14,14 @@ const DAY=86400000;
   applyPreset('30'); await reload(); render(view);
 })();
 async function reload(){
-  [SALES,PURCH,REGS]=await Promise.all([DB.list('sales'),DB.list('purchases'),DB.list('cashRegisters')]);
+  // B1: se consulta solo el rango seleccionado, nunca las colecciones completas.
+  const [f,t]=range();
+  const tt=isFinite(t)?t:Date.now();
+  [SALES,PURCH,REGS]=await Promise.all([
+    DB.list('sales',{where:[['at','>=',f],['at','<=',tt]],orderBy:['at','desc']}),
+    DB.list('purchases',{where:[['at','>=',f],['at','<=',tt]]}),
+    DB.list('cashRegisters',{where:[['status','==','cerrada']]})
+  ]);
 }
 const iso=ts=>new Date(ts).toISOString().slice(0,10);
 function applyPreset(p){
@@ -37,9 +44,9 @@ function render(view){
         <div class="field" style="margin:0"><label>Desde</label><input class="input" id="from" type="date" value="${from}"></div>
         <div class="field" style="margin:0"><label>Hasta</label><input class="input" id="to" type="date" value="${to}"></div></div></div>
     <div id="host" class="mt-16"></div>`;
-  view.querySelectorAll('[data-p]').forEach(c=>c.onclick=()=>{applyPreset(c.dataset.p);render(view);});
-  document.getElementById('from').onchange=e=>{from=e.target.value;preset='';paint();};
-  document.getElementById('to').onchange=e=>{to=e.target.value;preset='';paint();};
+  view.querySelectorAll('[data-p]').forEach(c=>c.onclick=async()=>{applyPreset(c.dataset.p);await reload();render(view);});
+  document.getElementById('from').onchange=async e=>{from=e.target.value;preset='';await reload();paint();};
+  document.getElementById('to').onchange=async e=>{to=e.target.value;preset='';await reload();paint();};
   document.getElementById('btnCsv').onclick=exportCsv;
   paint();
 }

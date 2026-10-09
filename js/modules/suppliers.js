@@ -9,6 +9,7 @@ import { Audit } from '../services/audit.service.js';
 import { can } from '../services/permissions.js';
 import { money, fdatetime } from '../utils/format.js';
 import { esc } from '../utils/escape.js';
+import { assertUnique } from '../utils/unique.js';
 
 let USER, LIST=[], PURCH=[], q='';
 (async()=>{
@@ -68,7 +69,11 @@ function openForm(x){
     const payload={tradeName:data.tradeName,legalName:f.legalName.value.trim(),cuit:f.cuit.value.trim(),phone:f.phone.value.trim(),
       email:f.email.value.trim(),address:f.address.value.trim(),city:f.city.value.trim(),province:f.province.value.trim(),
       active:x?x.active!==false:true};
-    try{ if(x){ await DB.update('suppliers',x.id,payload); await Audit.log('update','supplier',{id:x.id}); }
+    try{
+      // Unicidad: CUIT y email (email sin distinguir mayús/minús).
+      await assertUnique('suppliers','cuit',payload.cuit,x?.id,'El CUIT');
+      await assertUnique('suppliers','email',payload.email,x?.id,'El email',true);
+      if(x){ await DB.update('suppliers',x.id,payload); await Audit.log('update','supplier',{id:x.id}); }
       else { payload.createdAt=Date.now(); const d=await DB.add('suppliers',payload); await Audit.log('create','supplier',{id:d.id}); }
       await reload(); m.close(); ok('Guardado'); paint();
     }catch(ex){ err(ex.message||'No se pudo guardar'); }};

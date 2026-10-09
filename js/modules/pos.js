@@ -7,25 +7,60 @@ import { ok, err, warn } from '../utils/toast.js';
 import { can } from '../services/permissions.js';
 import { openPayment, showTicket } from './pos-pay.js';
 import { esc } from '../utils/escape.js';
+import { DEMO_MODE } from '../config/firebase-config.js';
 
 export let STATE={cart:[],generalDiscount:0,clientId:'',user:null};
 let PRODUCTS=[],CATS=[],CLIENTS=[],activeCat='';
+let CASH=null, REQUIRE_CASH=true;
+let DEFAULT_CLIENT_ID='';
+// C2: estado de conexión. En MODO DEMO no hace falta red (localStorage), así que
+// el bloqueo por «sin conexión» solo aplica con backend real (Firebase).
+let ONLINE = (typeof navigator==='undefined') ? true : navigator.onLine;
+const offlineBlocks = () => !DEMO_MODE && !ONLINE;
 
 (async()=>{
   const user=await requireAuth('pos'); if(!user) return;
   STATE.user=user;
   const view=renderShell('pos','Punto de Venta');
   view.innerHTML='<div class="loader">Cargando…</div>';
-  [PRODUCTS,CATS,CLIENTS]=await Promise.all([DB.list('products'),DB.list('categories'),DB.list('clients')]);
-  PRODUCTS=PRODUCTS.filter(p=>p.active!==false);
+  const [prods,cats,clients,biz,regs]=await Promise.all([
+    DB.list('products'),DB.list('categories'),DB.list('clients'),
+    DB.get('settings','business').catch(()=>null),
+    DB.list('cashRegisters',{where:[['status','==','abierta']]})
+  ]);
+  PRODUCTS=prods.filter(p=>p.active!==false); CATS=cats; CLIENTS=clients;
+  REQUIRE_CASH = biz ? biz.requireOpenCash!==false : true;
+  DEFAULT_CLIENT_ID = (biz && biz.defaultClientId) || '';
+  CASH = regs.find(r=>r.openedBy===user.id)||null; // B2: caja del propio usuario
   render(view);
+  // C2: escuchar cambios de conectividad y reflejarlos en la UI.
+  window.addEventListener('online', onConn);
+  window.addEventListener('offline', onConn);
   const gs=document.getElementById('globalSearch'); if(gs) gs.style.display='none';
 })();
 
+// C2: refresca el aviso de conexión y el estado del botón de cobro.
+function onConn(){
+  ONLINE = navigator.onLine;
+  const b=document.getElementById('offlineBar');
+  if(b) b.style.display = offlineBlocks() ? 'block' : 'none';
+  // vuelve a pintar el carrito para habilitar/deshabilitar «Cobrar».
+  if(document.getElementById('cartItems')) paintCart();
+}
+
 function render(view){
-  const cf=CLIENTS.find(c=>/final/i.test(c.lastName||'')); if(cf) STATE.clientId=cf.id;
+  // Cliente por defecto (ej. «Consumidor Final»): primero el configurado en
+  // ajustes (defaultClientId), luego el marcado isDefault.
+  const cf=CLIENTS.find(c=>c.id===DEFAULT_CLIENT_ID) || CLIENTS.find(c=>c.isDefault) || CLIENTS.find(c=>/final/i.test(c.lastName||''));
+  if(cf) STATE.clientId=cf.id;
   view.innerHTML=`<div class="pos">
     <div class="pos-left">
+      <div id="offlineBar" style="display:${offlineBlocks()?'block':'none'};margin-bottom:10px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;background:#fdecec;color:#c0392b">
+        📶 Sin conexión a internet — el cobro está bloqueado hasta reconectar.
+      </div>
+      <div class="cash-status ${CASH?'open':'closed'}" style="margin-bottom:10px;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;${CASH?'background:#e8f7ee;color:#128a4e':'background:#fdecec;color:#c0392b'}">
+        ${CASH?('🟢 Caja abierta — '+esc(CASH.openedByName||STATE.user.name)):('🔴 Sin caja abierta'+(REQUIRE_CASH?' — el cobro en efectivo está bloqueado':''))}
+      </div>
       <div class="pos-search">
         <input class="input" id="posSearch" placeholder="🔍 Buscar por nombre o código" autofocus>
         <input class="input" id="posBarcode" placeholder="📷 Código de barras (Enter)" style="max-width:220px">
@@ -129,7 +164,7 @@ function paintCart(){
     <div class="row"><span>Costo</span><span class="text-muted">${money(t.cost)}</span></div>
     <div class="row"><span>Ganancia est.</span><span class="text-profit">${money(t.profit)}</span></div>
     <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
-    <button class="btn btn-primary w-full" id="btnCheckout" style="padding:14px;font-size:16px">💳 Cobrar (F2)</button>`;
+    <button class="btn btn-primary w-full" id="btnCheckout" ${offlineBlocks()?'disabled':''} style="padding:14px;font-size:16px">${offlineBlocks()?'📶 Sin conexión':'💳 Cobrar (F2)'}</button>`;
 
   host.querySelectorAll('[data-qty]').forEach(inp=>inp.onchange=()=>setQty(+inp.dataset.qty,+inp.value));
   host.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>setQty(+b.dataset.inc,STATE.cart[+b.dataset.inc].qty+1));
@@ -150,6 +185,8 @@ function setQty(i,v){
 
 async function doCheckout(){
   if(!STATE.cart.length) return;
+  // C2: sin conexión y con backend real, no se permite cobrar.
+  if(offlineBlocks()) return warn('Sin conexión a internet: no se puede cobrar hasta reconectar');
   const t=calcTotals(STATE.cart,STATE.generalDiscount);
   const client=CLIENTS.find(c=>c.id===STATE.clientId);
   const sale=await openPayment({total:t.total,client,canCC:!!client});

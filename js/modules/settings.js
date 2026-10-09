@@ -9,6 +9,9 @@ import { money, setCurrency } from '../utils/format.js';
 import { PAYMENT_METHODS } from '../services/sales.service.js';
 import { toggleTheme, currentTheme } from '../utils/theme.js';
 import { esc } from '../utils/escape.js';
+import { can } from '../services/permissions.js';
+import { fdatetime } from '../utils/format.js';
+import { buildBackup, download } from '../utils/csv.js';
 
 let USER, BIZ={}, maxNumber=1000, tab='negocio';
 const DEFCUR={symbol:'$',code:'ARS',locale:'es-AR',decimals:2};
@@ -22,13 +25,14 @@ async function load(){
   BIZ=(await DB.get('settings','business'))||{};
   if(!BIZ.currency) BIZ.currency={...DEFCUR};
   if(!Array.isArray(BIZ.paymentMethods)) BIZ.paymentMethods=PAYMENT_METHODS.map(m=>m.v);
-  const sales=await DB.list('sales');
-  maxNumber=sales.reduce((m,s)=>Math.max(m,s.number||0),0);
+  // B1: no leemos todas las ventas; tomamos el último número del contador.
+  const counter=await DB.get('counters','sales').catch(()=>null);
+  maxNumber=(counter&&counter.last)||0;
   setCurrency(BIZ.currency);
 }
 
 function render(view){
-  const tabs=[['negocio','🏪 Negocio'],['moneda','💱 Moneda e impuestos'],['numeracion','🔢 Numeración'],['pagos','💳 Medios de pago'],['apariencia','🎨 Apariencia']];
+  const tabs=[['negocio','🏪 Negocio'],['moneda','💱 Moneda e impuestos'],['numeracion','🔢 Numeración'],['pagos','💳 Medios de pago'],['operacion','⚙️ Operación'],['apariencia','🎨 Apariencia']];
   view.innerHTML=`<div class="page-head"><div><h1>Configuración</h1><p>Parámetros generales del sistema</p></div>
     <button class="btn btn-primary" id="btnSave">💾 Guardar cambios</button></div>
     <div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${tab===k?'active':''}" data-t="${k}">${l}</button>`).join('')}</div>
@@ -45,6 +49,7 @@ function paint(){
   else if(tab==='moneda') host.innerHTML=moneda();
   else if(tab==='numeracion') host.innerHTML=numeracion();
   else if(tab==='pagos') host.innerHTML=pagos();
+  else if(tab==='operacion') host.innerHTML=operacion();
   else host.innerHTML=apariencia();
   bindTab();
 }
@@ -84,6 +89,23 @@ function pagos(){
     ${PAYMENT_METHODS.map(m=>{const on=BIZ.paymentMethods.includes(m.v);const lock=m.v==='efectivo';
       return `<label class="ck"><input type="checkbox" data-pm="${m.v}" ${on?'checked':''} ${lock?'disabled':''}> ${m.ic} ${m.l}${lock?' <span style="color:var(--text-3);font-size:12px">(obligatorio)</span>':''}</label>`;}).join('')}</div>`;
 }
+function operacion(){
+  const roc=BIZ.requireOpenCash!==false; // default true
+  const ans=BIZ.allowNegativeStock===true; // default false
+  const isAdmin=USER.role==='admin';
+  const last=BIZ.lastBackupAt?fdatetime(BIZ.lastBackupAt):'nunca';
+  return `<div class="card card-pad"><h3 style="margin-bottom:12px">Reglas de operación</h3>
+    <label class="ck"><input type="checkbox" id="requireOpenCash" ${roc?'checked':''}> Exigir caja abierta para cobrar en efectivo</label>
+    <p style="color:var(--text-3);font-size:12px;margin:4px 0 12px">Si está activo, no se puede cobrar en efectivo sin una caja abierta.</p>
+    <label class="ck"><input type="checkbox" id="allowNegativeStock" ${ans?'checked':''}> Permitir stock negativo</label>
+    <p style="color:var(--text-3);font-size:12px;margin:4px 0 0">Si está activo, se pueden vender productos aunque el stock quede por debajo de cero.</p></div>
+    <div class="card card-pad mt-16"><h3 style="margin-bottom:12px">💾 Respaldo de datos</h3>
+    <p style="color:var(--text-2);font-size:13px;margin-bottom:4px">Descarga una copia completa de los datos del sistema en formato JSON.</p>
+    <p style="color:var(--text-3);font-size:12px;margin-bottom:12px">Último respaldo: <b>${last}</b></p>
+    ${isAdmin?`<button class="btn btn-ghost" id="btnBackup">⬇️ Exportar respaldo</button>`
+      :`<p style="color:var(--text-3);font-size:12px">Solo un administrador puede exportar el respaldo.</p>`}</div>`;
+}
+
 function apariencia(){
   const t=currentTheme();
   return `<div class="card card-pad"><h3 style="margin-bottom:12px">Tema visual</h3>
@@ -113,6 +135,10 @@ function bindTab(){
       const v=c.dataset.pm; const set2=new Set(BIZ.paymentMethods);
       if(c.checked) set2.add(v); else set2.delete(v); set2.add('efectivo');
       BIZ.paymentMethods=PAYMENT_METHODS.map(m=>m.v).filter(x=>set2.has(x)); });
+  } else if(tab==='operacion'){
+    const roc=document.getElementById('requireOpenCash'); if(roc)roc.onchange=()=>{BIZ.requireOpenCash=roc.checked;};
+    const ans=document.getElementById('allowNegativeStock'); if(ans)ans.onchange=()=>{BIZ.allowNegativeStock=ans.checked;};
+    const bk=document.getElementById('btnBackup'); if(bk)bk.onclick=exportBackup;
   } else {
     const l=document.getElementById('thLight'), d=document.getElementById('thDark');
     if(l)l.onclick=()=>{ if(currentTheme()!=='light')toggleTheme(); paint(); };
@@ -129,4 +155,22 @@ async function save(){
     await Audit.log('settings.save','settings',{name:BIZ.name});
     ok('Configuración guardada');
   }catch(ex){ err(ex.message||'No se pudo guardar'); }
+}
+
+// B5: exporta un respaldo JSON completo (solo admin) y guarda la fecha.
+async function exportBackup(){
+  if(USER.role!=='admin') return err('Solo un administrador puede exportar el respaldo');
+  const btn=document.getElementById('btnBackup');
+  if(btn){ btn.disabled=true; btn.textContent='Generando…'; }
+  try{
+    const backup=await buildBackup(DB);
+    const stamp=new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    download(`respaldo_pos_${stamp}.json`, JSON.stringify(backup,null,2), 'application/json');
+    const at=Date.now(); BIZ.lastBackupAt=at;
+    await DB.set('settings','business',{lastBackupAt:at});
+    await Audit.log('settings.backup','settings',{at});
+    ok('Respaldo exportado');
+    paint();
+  }catch(ex){ err(ex.message||'No se pudo exportar el respaldo'); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='⬇️ Exportar respaldo'; } }
 }

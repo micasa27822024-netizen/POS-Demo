@@ -12,26 +12,45 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   const view=renderShell('dashboard','Dashboard');
   view.innerHTML='<div class="loader">Cargando panel…</div>';
 
-  const [sales,products,clients,suppliers,categories]=await Promise.all([
-    DB.list('sales'),DB.list('products'),DB.list('clients'),DB.list('suppliers'),DB.list('categories')]);
+  // B1: lecturas acotadas. Los agregados diarios salen de `dailyStats`
+  // (ya netos de anulaciones). El detalle de ítems se consulta solo para los
+  // últimos 30 días; los deudores por filtro de saldo; stock por productos.
+  const iso=d=>new Date(d).toISOString().slice(0,10);
+  const now=Date.now();
+  const cutoff30=now-30*864e5;
+  const cutoffStr=iso(cutoff30);
+  const [dstats,recentDetail,products,debtors,suppliers,categories]=await Promise.all([
+    DB.list('dailyStats',{where:[['date','>=',cutoffStr]],orderBy:['date','asc']}),
+    DB.list('sales',{where:[['at','>=',cutoff30]],orderBy:['at','desc']}),
+    DB.list('products'),
+    DB.list('clients',{where:[['balance','>',0]]}),
+    DB.list('suppliers',{limit:6}),
+    DB.list('categories')
+  ]);
 
-  const today=dayStart(), mStart=monthStart();
-  const valid=sales.filter(s=>s.status!=='anulada');
-  const todaySales=valid.filter(s=>s.at>=today);
-  const monthSales=valid.filter(s=>s.at>=mStart);
-  const sum=(a,f)=>a.reduce((t,x)=>t+(f(x)||0),0);
+  const todayStr=iso(now);
+  const monthPrefix=todayStr.slice(0,7); // YYYY-MM
+  const dayMap={}; dstats.forEach(d=>dayMap[d.date]=d);
+  const td=dayMap[todayStr]||{};
+  const monthRows=dstats.filter(d=>(d.date||'').startsWith(monthPrefix));
+  const msum=(f)=>monthRows.reduce((t,x)=>t+(x[f]||0),0);
 
-  const totToday=sum(todaySales,s=>s.total);
-  const totMonth=sum(monthSales,s=>s.total);
-  const profitMonth=sum(monthSales,s=>s.profit);
-  const payTotals={}; valid.forEach(s=>(s.payments||[]).forEach(p=>payTotals[p.method]=(payTotals[p.method]||0)+p.amount));
+  const totToday=td.total||0;
+  const totMonth=msum('total');
+  const profitMonth=msum('profit');
+  const todayCount=td.salesCount||0;
+  const monthCount=msum('salesCount');
+
+  // Métodos de pago: suma de los campos pm_* de los últimos 30 días.
+  const payTotals={};
+  dstats.forEach(d=>{ for(const k in d){ if(k.startsWith('pm_')){ const m=k.slice(3); payTotals[m]=(payTotals[m]||0)+(d[k]||0); } } });
   const cash=payTotals.efectivo||0, card=(payTotals.debito||0)+(payTotals.credito||0), cc=payTotals.cuenta_corriente||0;
 
+  const valid=recentDetail.filter(s=>s.status!=='anulada'); // detalle 30d para rankings
   const lowStock=products.filter(p=>p.active!==false && p.stock>0 && p.stock<=p.stockMin);
   const noStock=products.filter(p=>p.active!==false && (p.stock||0)<=0);
-  const debtors=clients.filter(c=>(c.balance||0)>0);
 
-  // Productos más vendidos
+  // Productos más vendidos (últimos 30 días)
   const prodQty={}; valid.forEach(s=>(s.items||[]).forEach(it=>prodQty[it.productId]=(prodQty[it.productId]||0)+it.qty));
   const topProducts=Object.entries(prodQty).map(([id,q])=>({p:products.find(x=>x.id===id),q}))
     .filter(x=>x.p).sort((a,b)=>b.q-a.q).slice(0,5);
@@ -42,10 +61,10 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   view.innerHTML=`
    <div class="page-head"><div><h1>Hola, ${esc(user.name.split(' ')[0])} 👋</h1><p>Resumen general de tu negocio</p></div></div>
    <div class="grid grid-4">
-     ${stat('💰','var(--sales)','Ventas de hoy',money(totToday),todaySales.length+' operaciones')}
-     ${stat('📅','var(--primary)','Ventas del mes',money(totMonth),monthSales.length+' operaciones')}
+     ${stat('💰','var(--sales)','Ventas de hoy',money(totToday),todayCount+' operaciones')}
+     ${stat('📅','var(--primary)','Ventas del mes',money(totMonth),monthCount+' operaciones')}
      ${stat('📈','var(--profit)','Ganancia del mes',money(profitMonth),'estimada')}
-     ${stat('🧾','var(--purchases)','Ticket promedio',money(monthSales.length?totMonth/monthSales.length:0),'del mes')}
+     ${stat('🧾','var(--purchases)','Ticket promedio',money(monthCount?totMonth/monthCount:0),'del mes')}
    </div>
    <div class="grid grid-4 mt-16">
      ${stat('💵','var(--cash)','Cobrado efectivo',money(cash))}
@@ -80,9 +99,8 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
 
   const recent=[...valid].sort((a,b)=>b.at-a.at).slice(0,6);
   document.getElementById('recentSales').innerHTML = recent.length? recent.map(s=>{
-    const cl=clients.find(c=>c.id===s.clientId);
     return `<div class="flex justify-between items-center" style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <div><b>#${esc(String(s.number))}</b> <span class="text-muted" style="font-size:12px">${esc(cl?cl.name+' '+(cl.lastName||''):'')}</span><br>
+      <div><b>#${esc(String(s.number))}</b> <span class="text-muted" style="font-size:12px">${esc(s.clientName||'Consumidor Final')}</span><br>
       <span style="font-size:11px;color:var(--text-3)">${fdatetime(s.at)}</span></div>
       <b class="text-sales">${money(s.total)}</b></div>`; }).join('') : '<div class="empty">Sin ventas aún</div>';
 
@@ -101,11 +119,12 @@ const PM_LABEL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transfer
   const tx=currentTheme()==='dark'?'#cbd5e1':'#475569';
   Chart.defaults.color=tx; Chart.defaults.borderColor=grid; Chart.defaults.font.family="'Inter',sans-serif";
 
-  // Daily last 14 days
+  // Daily last 14 days (desde dailyStats)
   const days=[],dayTot=[];
-  for(let i=13;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); const ds=dayStart(d);
-    const de=ds+864e5; days.push(d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}));
-    dayTot.push(sum(valid.filter(s=>s.at>=ds&&s.at<de),s=>s.total)); }
+  for(let i=13;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i);
+    const key=iso(d);
+    days.push(d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}));
+    dayTot.push((dayMap[key]&&dayMap[key].total)||0); }
   new Chart(document.getElementById('chDaily'),{type:'line',data:{labels:days,datasets:[{label:'Ventas',data:dayTot,
     borderColor:'#2563eb',backgroundColor:'rgba(37,99,235,.12)',fill:true,tension:.35,pointRadius:3}]},
     options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});

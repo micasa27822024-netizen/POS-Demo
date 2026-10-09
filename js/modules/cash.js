@@ -16,7 +16,9 @@ let USER, REG=null, MOVS=[];
   await reload(); render(view);
 })();
 async function reload(){
-  REG=(await DB.list('cashRegisters',{where:[['status','==','abierta']]}))[0]||null;
+  // B2: la caja mostrada es la del propio usuario (no la de otro cajero).
+  const open=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
+  REG=open.find(r=>r.openedBy===USER.id)||null;
   MOVS = REG ? (await DB.list('cashMovements',{where:[['registerId','==',REG.id]]})).sort((a,b)=>b.at-a.at) : [];
 }
 const signed=m=>m.type==='egreso'?-Math.abs(m.amount):Math.abs(m.amount);
@@ -69,7 +71,11 @@ function openCash(){
   const cancel=document.createElement('button'); cancel.className='btn btn-ghost'; cancel.textContent='Cancelar';
   const m=openModal({title:'Abrir caja',body:f,footer:[cancel,save],width:420}); cancel.onclick=m.close;
   save.onclick=async()=>{ const amount=+f.amount.value||0;
-    try{ await DB.add('cashRegisters',{status:'abierta',openingAmount:amount,openedBy:USER.id,openedByName:USER.name,openedAt:Date.now()});
+    try{
+      // B2: un mismo usuario no puede tener dos cajas abiertas a la vez.
+      const open=await DB.list('cashRegisters',{where:[['status','==','abierta']]});
+      if(open.some(r=>r.openedBy===USER.id)) throw new Error('Ya tenés una caja abierta. Cerrala antes de abrir otra.');
+      await DB.add('cashRegisters',{status:'abierta',openingAmount:amount,openedBy:USER.id,openedByName:USER.name,openedAt:Date.now()});
       await Audit.log('cash.open','cash',{amount}); await reload(); ok('Caja abierta'); location.reload();
     }catch(ex){ err(ex.message); }};
 }
