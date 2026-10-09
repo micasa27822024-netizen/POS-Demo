@@ -7,6 +7,9 @@ import { Audit } from './audit.service.js';
 import { calcTotals, DECIMAL_UNITS, isDecimalUnit } from './sales-calc.js';
 export { calcTotals, DECIMAL_UNITS, isDecimalUnit };
 import { calcReturn } from './sales-calc.js';
+// C1: interfaz de facturación electrónica (preparación sin backend).
+import { Fiscal, fiscalDefault } from './fiscal.service.js';
+export { Fiscal };
 
 export const PAYMENT_METHODS=[
   {v:'efectivo',l:'Efectivo',ic:'💵'},
@@ -40,6 +43,11 @@ export const Sales={
     if(t.generalDiscount>t.subtotal) throw new Error('El descuento supera el subtotal');
 
     const biz=await DB.get('settings','business').catch(()=>null);
+    // C1: configuración del comprobante (punto de venta y tipo) para el estado
+    // fiscal por defecto de la venta. La numeración fiscal es SEPARADA de la interna.
+    const invCfg=await DB.get('settings','invoice').catch(()=>null);
+    const fiscal0=fiscalDefault({puntoVenta:(invCfg&&invCfg.puntoVenta)||'0001',
+      tipoComprobante:(invCfg&&invCfg.tipo)||'X'});
     const allowNeg=!!(biz&&biz.allowNegativeStock);
     const requireOpenCash = biz ? biz.requireOpenCash!==false : true; // B2: por defecto true
     const numberStart=(biz&&parseInt(biz.numberStart,10))||1000;
@@ -79,6 +87,7 @@ export const Sales={
         clientName:client?`${client.name} ${client.lastName||''}`.trim():'Consumidor Final',
         userId:user.id, userName:user.name, status:'completada',
         cashReceived:+cashReceived||0, change:Math.max(0,+((cashReceived||0)-cashApplied).toFixed(2)),
+        fiscal:fiscal0, // C1: comprobante interno X por defecto, listo para pedir CAE
         at:Date.now()
       });
       for(const it of items){ const p=prod[it.productId];
@@ -190,5 +199,24 @@ export const Sales={
       Audit.log('sale.return','sale',{id:saleId,number:s.number,refund:refundTotal,reason:reason.trim()});
       return {id:retId,saleId,number:s.number,refundTotal,lines:detail};
     });
+  },
+
+  // C1: solicita el CAE a AFIP/ARCA a través de la interfaz fiscal conectable y
+  // guarda el resultado en sale.fiscal. Con el proveedor NULO por defecto deja el
+  // comprobante como interno X (estado 'no_fiscal'); al conectar un backend real
+  // (Fiscal.setProvider) completará tipo, numeración fiscal, CAE y vencimiento.
+  // No se hace dentro de una transacción de Firestore: el pedido de CAE requiere
+  // red/backend y la venta ya quedó registrada de forma atómica (A3).
+  async requestFiscal(saleId){
+    const sale=await DB.get('sales',saleId);
+    if(!sale) throw new Error('La venta no existe');
+    if(sale.status==='anulada') throw new Error('La venta está anulada: no se emite comprobante fiscal');
+    const invCfg=await DB.get('settings','invoice').catch(()=>null);
+    const cfg={puntoVenta:(invCfg&&invCfg.puntoVenta)||'0001',
+      tipoComprobante:(invCfg&&invCfg.tipo)||'X'};
+    const fiscal=await Fiscal.requestCAE(sale,cfg);
+    await DB.update('sales',saleId,{fiscal,updatedAt:Date.now()});
+    Audit.log('sale.fiscal','sale',{id:saleId,number:sale.number,estado:fiscal.estado,cae:fiscal.cae||''});
+    return fiscal;
   }
 };
