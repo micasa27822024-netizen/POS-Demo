@@ -2,7 +2,10 @@
 
 Sistema POS profesional construido con **HTML5 + CSS3 + JavaScript modular (ESM)** y **Firebase** (Auth, Firestore, Hosting). Funciona 100% en el **plan Spark GRATUITO**: no usa Firebase Storage ni Cloud Functions (no requiere plan Blaze ni tarjeta).
 
-> **Esta es la ENTREGA FASE 1**: arquitectura general, diseño visual, Firebase, autenticación, roles/permisos, dashboard, productos, categorías y usuarios. Los módulos restantes (POS, ventas, compras, caja, stock, clientes, proveedores, reportes, tickets, facturas, configuración) ya tienen su página y navegación, y se integran sobre la misma arquitectura sin rehacer nada.
+> **Estado actual:** sistema **completo** (todos los módulos operativos) con la
+> auditoría técnica aplicada — Fases A y B. Ver `CHANGELOG.md` para el detalle
+> de cambios, `docs/MANUAL.md` (manual por rol) y `docs/ALTA-CLIENTE.md` (alta de
+> un cliente nuevo en Firebase). Las pruebas están en `tests/` (`node --test`).
 
 ---
 
@@ -71,9 +74,15 @@ automáticamente la primera vez y quedan claramente marcados con `demo:true`.
                storage.service, products.service, audit.service, permissions
     /utils     format, toast, modal, validate, theme, csv
     /components shell (sidebar+topbar)
-    /modules   guard, login, dashboard, products, categories, users, soon
+    /modules   guard, login, dashboard, products, categories, users,
+               pos, pos-pay, sales, purchases, cash, stock, clients,
+               suppliers, reports, audit, tickets, invoices, settings
     /seed      demo-data.js
   /firebase  firestore.rules · firestore.indexes.json
+  /tests     unit.test.mjs (lógica pura) · rules.test.mjs (emulador) · README.md
+  /docs      MANUAL.md (manual por rol) · ALTA-CLIENTE.md (provisioning) · DECISIONES.md (defaults sección 8)
+  package.json  (type:module · script `npm test`)
+  CHANGELOG.md
 ```
 
 **Principio clave:** las pantallas nunca hablan con Firestore directo. Usan la
@@ -148,8 +157,38 @@ finas con `can()`) y las **Security Rules** del backend.
   Cloud Functions, no puede hacerse de forma segura solo en el navegador).
 - **Lector de código de barras por cámara:** previsto para el POS con una librería JS;
   el lector USB funciona como teclado sin configuración extra.
-- **Backups automatizados:** desde el frontend solo se puede exportar; un backup
-  completo requiere Cloud Functions + Admin SDK (previsto en la arquitectura).
+- **Backups:** desde **Configuración → Operación** el administrador puede
+  **exportar un respaldo JSON completo** (todas las colecciones, lectura
+  paginada) y queda registrada la fecha del último respaldo. Un backup
+  programado/automático sigue requiriendo Cloud Functions + Admin SDK.
+
+---
+
+## 🚀 Rendimiento y escalabilidad (auditoría B1)
+
+- **Sin lecturas de colecciones completas.** Ventas, Reportes y Dashboard
+  consultan **por rango de fechas** y de a páginas (`limit` + `startAfter`,
+  con botón “Cargar más” en Ventas).
+- **Agregados diarios `dailyStats`.** Cada venta/anulación actualiza de forma
+  incremental (`increment`) un documento por día con `salesCount`, `total`,
+  `cost`, `profit`, totales por medio de pago (`pm_*`) y anulaciones
+  (`voidedCount`, `voidedTotal`). El Dashboard lee estos agregados en vez de
+  recorrer todas las ventas.
+- **Conteos del lado servidor** con `getCountFromServer` (`DB.count`).
+- **Imágenes livianas:** las fotos se reducen a miniatura (~200×200, objetivo
+  <30 KB) antes de guardarse como base64; se rechazan las demasiado grandes.
+- **Caché local persistente** de Firestore (IndexedDB, multi-pestaña) para
+  reducir lecturas repetidas y permitir trabajo offline.
+- Índices en `firebase/firestore.indexes.json`.
+
+## 🧪 Pruebas
+
+```bash
+node --test        # unitarios de lógica pura (calcTotals, isDecimalUnit, margin)
+```
+
+Los tests de **reglas de Firestore** (matriz de permisos) corren contra el
+emulador; ver `tests/README.md`.
 
 ---
 

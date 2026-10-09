@@ -1,0 +1,10 @@
+{
+  "name": "pos-pro",
+  "version": "1.0.0",
+  "description": "POS Pro — sistema de punto de venta web (HTML/CSS/JS ESM + Firebase).",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

@@ -1,8 +1,9 @@
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://firebaseinstallations.googleapis.com wss://*.firebaseio.com; frame-src https://www.google.com https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Punto de Venta — POS Pro</title>
 <link rel="stylesheet" href="css/variables.css"><link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/components.css"><link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/pos.css">
-<script type="module">import {initTheme} from './js/utils/theme.js';initTheme();</script>
+<script type="module" src="js/boot/theme-init.js"></script>
 </head><body><script type="module" src="js/modules/pos.js"></script></body></html>
