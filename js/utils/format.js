@@ -23,3 +23,10 @@ export function ftime(ts){ if(!ts) return '—'; return new Date(ts).toLocaleTim
 export function dayStart(d=new Date()){const x=new Date(d);x.setHours(0,0,0,0);return x.getTime();}
 export function dayEnd(d=new Date()){const x=new Date(d);x.setHours(23,59,59,999);return x.getTime();}
 export function monthStart(d=new Date()){return new Date(d.getFullYear(),d.getMonth(),1).getTime();}
+
+// Clave de día en horario de Argentina (YYYY-MM-DD), independiente de UTC.
+// Antes se usaba new Date(ts).toISOString().slice(0,10), que devuelve el día en
+// UTC: una venta de la noche (p. ej. 22:00 en Argentina) caía contada en el día
+// SIGUIENTE. Esta función resuelve el día real local del negocio.
+const _AR_DAY=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'});
+export function dayKeyAR(ts=Date.now()){ const d=ts instanceof Date?ts:new Date(ts); return _AR_DAY.format(d); }

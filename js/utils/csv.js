@@ -68,39 +68,30 @@ export function parseCSV(text) {
 
 // Colecciones incluidas en el respaldo completo del sistema.
 export const BACKUP_COLLECTIONS = [
-  'settings', 'categories', 'products', 'clients', 'suppliers',
-  'sales', 'payments', 'purchases', 'stockMovements',
+  'settings', 'categories', 'subcategories', 'products', 'clients', 'suppliers',
+  'users', 'sales', 'payments', 'purchases', 'returns', 'stockMovements',
   'cashRegisters', 'cashMovements', 'accountsReceivable',
   'counters', 'dailyStats', 'auditLogs'
 ];
 
-// Construye un respaldo JSON completo leyendo cada colección por páginas
-// (B1: nunca se asume un único getDocs gigante; se usa limit + startAfter).
-export async function buildBackup(DB, { pageSize = 500, orderField = null } = {}) {
+// Construye un respaldo JSON completo leyendo cada colección por páginas.
+// B1: nunca un único getDocs gigante; se usa limit + startAfter.
+// Se pagina por el ID de documento ('__id__' -> documentId()), que SIEMPRE
+// existe: así no se excluye ningún documento (antes se ordenaba por 'at' y los
+// documentos sin ese campo quedaban fuera del respaldo).
+export async function buildBackup(DB, { pageSize = 500 } = {}) {
   const out = { _meta: { app: 'POS Pro', version: 1, exportedAt: new Date().toISOString() }, data: {} };
   for (const name of BACKUP_COLLECTIONS) {
     const all = [];
     let cursor = null;
-    // Ordenamos por un campo estable si existe (at) para paginar de forma determinista.
-    const ob = orderField || 'at';
-    for (let guard = 0; guard < 1000; guard++) {
-      const opts = { limit: pageSize };
-      // Intentamos ordenar por 'at'; si la colección no lo tiene, se cae a sin orden.
-      try {
-        opts.orderBy = [ob, 'asc'];
-        if (cursor != null) opts.startAfter = cursor;
-        const page = await DB.list(name, opts);
-        if (!page.length) break;
-        all.push(...page);
-        if (page.length < pageSize) break;
-        const last = page[page.length - 1];
-        cursor = last[ob];
-        if (cursor == null) break; // sin campo de orden: evitamos bucle
-      } catch (_) {
-        // Fallback: una sola lectura simple.
-        const page = await DB.list(name);
-        all.length = 0; all.push(...page); break;
-      }
+    for (let guard = 0; guard < 10000; guard++) {
+      const opts = { orderBy: ['__id__', 'asc'], limit: pageSize };
+      if (cursor != null) opts.startAfter = cursor;
+      const page = await DB.list(name, opts);
+      if (!page.length) break;
+      all.push(...page);
+      cursor = page[page.length - 1].id;
+      if (page.length < pageSize || cursor == null) break;
     }
     out.data[name] = all;
   }
