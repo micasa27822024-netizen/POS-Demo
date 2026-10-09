@@ -23,6 +23,10 @@ const NAV=[
     {k:'clients',ic:'👥',label:'Clientes',href:'clients.html'},
     {k:'suppliers',ic:'🏭',label:'Proveedores',href:'suppliers.html'}
   ]},
+  {g:'Comprobantes',items:[
+    {k:'tickets',ic:'🎟️',label:'Diseño de Ticket',href:'tickets.html'},
+    {k:'invoices',ic:'📄',label:'Facturas y Comprob.',href:'invoices.html'}
+  ]},
   {g:'Gestión',items:[
     {k:'reports',ic:'📉',label:'Reportes',href:'reports.html'},
     {k:'users',ic:'🔑',label:'Usuarios',href:'users.html'},
